@@ -59,15 +59,15 @@
  *   throttle  -> forward speed command along the travel direction, realised as tilt theta plus collective.
  *                The bottom of the stick is zero speed (hard brake, and the pose for arming), the top is the steady
  *                speed at the maximum tilt. There is no reverse.
- *   yaw       -> head check: nose offset from the travel direction, springs back to 0 at centre.
+ *   yaw       -> bank angle phi, i.e. a turn in the horizontal plane. Centre = none.
  *   pitch     -> vertical lift command (not raw throttle). The bottom of the stick gives no lift at all (free
  *                fall), the centre gives 1 g (thrust balances weight), and the top gives the maximum thrust,
  *                all of it as lift, whatever multiple of the weight that is.
- *   roll      -> bank angle phi, i.e. a turn in the horizontal plane. Centre = none.
+ *   roll      -> head check: nose offset from the travel direction, springs back to 0 at centre.
  *
  * Arming is with the left stick at the bottom (zero speed) and the right stick wherever the lift should start.
- * If the mode is engaged with the throttle low and the roll stick off-centre, the tilt stays at zero until
- * the roll stick has been centred once.
+ * If the mode is engaged with the throttle low and the bank (yaw) stick off-centre, the tilt stays at zero
+ * until the bank stick has been centred once.
  *
  * Each update, while BANK_MODE is active:
  *
@@ -149,7 +149,7 @@
 #define BANK_TW_FILTER_HZ       0.2f    // cutoff of the thrust-to-weight learning filter
 #define BANK_TW_LEARN_WINDOW    0.3f    // g of thrust above 1 g that is still learnt from
 #define BANK_TW_LEARN_TOLERANCE 1e-3f   // g of thrust below 1 g that is still learnt from (rounding at the centre)
-#define BANK_TW_RANGE           0.3f    // the estimate stays within this fraction of the configured value
+#define BANK_TW_RANGE           0.6f    // the estimate stays within this fraction of the configured value
 
 static bankState_t bankState;
 
@@ -345,7 +345,7 @@ STATIC_UNIT_TESTED void bankCompute(const bankModeConfig_t *config, const bankIn
     float rollStick = bankShapeStick(in->roll, deadband);
     float speedStick = bankShapeStick(in->speed, deadband);     // 0..1, the deadband is at the bottom
 
-    // Engaged with the throttle low (arming): no tilt until the roll stick has been centred once
+    // Engaged with the throttle low (arming): no tilt until the bank stick has been centred once
     if (!state->started) {
         state->started = true;
         state->tiltLocked = in->throttleLow;
@@ -464,9 +464,11 @@ void bankModeUpdate(timeUs_t currentTimeUs)
     }
 
     const bankInputs_t inputs = {
-        .roll = getRcDeflection(FD_ROLL),
+        // The L/R sticks are swapped: yaw stick = bank, roll stick = head check. Both are positive for
+        // the stick to the right, and the yaw deflection is positive to the left, hence the signs.
+        .roll = -getRcDeflection(FD_YAW),
         .speed = (rcCommand[THROTTLE] - PWM_RANGE_MIN) / (float)PWM_RANGE,   // 0 at the bottom, 1 at the top
-        .yaw = getRcDeflection(FD_YAW),
+        .yaw = -getRcDeflection(FD_ROLL),
         .lift = 0.5f * (getRcDeflection(FD_PITCH) + 1.0f),
         .throttleLow = calculateThrottleStatus() == THROTTLE_LOW,
         .armed = ARMING_FLAG(ARMED),

@@ -70636,3 +70636,17 @@ The owner changed `../betaflight` again, this time uncommitted on `banked-mode-i
 - Checked this turn: `npm run build:wasm` exit 0 and `git diff --stat vendor/betaflight` empty. `lint:fc` 33 of 33, `lint:presets` 4 of 4, `lint:catalog` ok. Headless Node hover, speed stick at the bottom, lift centred, `betaflight-default`: climb rate 11 m/s with `bank_thrust_to_weight` 200, 3.0 m/s with 300, 0.63 m/s with 400. `whoop-freestyle`: 9 m/s with 200, 1.4 m/s with 300.
 - What it means: the estimate is clamped to plus or minus 30 percent of the configured value (`BANK_TW_RANGE`), so it cannot find the craft's real ~3.5 to 4.0 from the default 2.0. Set `bank_thrust_to_weight` within 30 percent of the craft (400 on betaflight-default is closest) and it hovers to about 0.6 m/s climb after 30 s. Whether the residual climb is the 0.2 Hz filter, the learning window or the sim's accelerometer I did not find out. That is the fork's logic, not changed here.
 - Not run: `npm run verify` (nothing in the plant, ABI or build moved, and the acro path is dormant of bank code, but I did not prove that with an A/B this turn), `lint:preload`, `shots.js`, any browser flight. Not claimed: flight feel.
+
+## 2026-10-14 | physics | Bank mode re-synced again: 3:1 default, 60 percent learning range
+
+The owner edited the fork (now committed as `b5aa83e46`, "save autoweight"): `bank_thrust_to_weight` default 200 to 300, `BANK_TW_RANGE` 0.3 to 0.6, unit test expectations updated. The owner said not to run tests in the fork. Re-synced with `scripts/sync-bank-mode.sh ../betaflight WORKTREE`; no patch, glue or ABI change. `dist/sim.wasm` rebuilt (emsdk 6.0.12), `git diff --stat vendor/betaflight` empty.
+
+- Checked: build only, plus a headless hover (speed stick bottom, lift centred, default prior 300, 20 s). Climb rate 2.3 m/s on `betaflight-default`, 1.35 m/s on `whoop-freestyle`. The whoop figures are identical to the earlier prior-300 run with the 30 percent range, so the wider range changed nothing there: the learner is not hitting its clamp, and its fixed point still leaves a climb. Cause not found (fork learning gate versus the sim's synthesised accelerometer, undecided).
+- Not run: `verify`, `lint:*`, any A/B, `shots.js`, any browser flight. Not claimed: flight feel.
+
+## 2026-10-14 | physics | Bank mode re-synced to fork `7906dc015`: sticks swapped, default 300
+
+Owner asked to sync the fork to latest. Ran `scripts/sync-bank-mode.sh` (ref `banked-mode-init`, committed, not the worktree). New since last sync: L/R sticks swapped (yaw stick = bank, roll stick = head check, both negated in `bankModeUpdate`), `thrustToWeight` default 300, `BANK_TW_RANGE` 0.6, comments and a header tweak. No patch, glue, ABI or settings change. `dist/sim.wasm` rebuilt (emsdk 6.0.12), `git diff --stat vendor/betaflight` empty.
+
+- Checked: `build:wasm` exit 0, `lint:fc` 33 of 33. The build printed an existing `-Wpointer-type-mismatch` warning in `plant.c:1103`, not touched.
+- Not run: `verify`, A/B, `shots.js`, any flight. Not claimed: flight feel. The stick swap is a control-mapping change: if the Quad screen or input remap also swaps roll and yaw for bank mode, the swap would be doubled.
