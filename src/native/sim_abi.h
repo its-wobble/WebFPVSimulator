@@ -275,6 +275,21 @@ int sim_set_pose(double px, double py, double pz,
 int sim_set_angle_mode(int on);
 
 /*
+ * Enable or disable BANK mode, the owner's new flight mode from the
+ * its-wobble/betaflight fork (flight/bank_mode.c, compiled unchanged): the
+ * throttle is a lift command, pitch a speed command, roll a bank angle and
+ * yaw a head check. The same switch a radio aux range on BOXBANK would be;
+ * it takes priority over angle mode, as the fork's core.c gives it. The
+ * flag follows on the next receiver frame. Additive ABI change, version
+ * unchanged: a replay that never calls this is bit-identical to one from
+ * before it existed.
+ */
+int sim_set_bank_mode(int on);
+
+/* 1 while Betaflight's BANK_MODE flag is up, else 0. */
+int sim_bank_mode(void);
+
+/*
  * Enable or disable Betaflight launch control, the race-start hold.
  * Off (0) is the default, and the path every harness replay takes.
  * On (non-zero) is BOXLAUNCHCONTROL at arm: pid.c's applyLaunchControl

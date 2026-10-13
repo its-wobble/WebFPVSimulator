@@ -44,6 +44,10 @@
 /* Parameter group storage normally defined in sensors/acceleration.c. */
 accelerometerConfig_t accelerometerConfig_System;
 
+/* The accelerometer itself, also from sensors/acceleration.c. Only BANK mode
+ * reads it; bf_glue.c fills it from the plant's specific force. */
+acc_t acc;
+
 /* Attitude estimate. Acro never reads it. Angle mode writes plant Euler
  * angles into this from bf_glue.c, which is what SITL does instead of
  * compiling the AHRS. */

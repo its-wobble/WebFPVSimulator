@@ -325,6 +325,19 @@ extern double SIM_AIR;
 extern double SIM_GRAVITY;
 
 /*
+ * THE ACCELEROMETER: specific force in the body frame (x forward, y left,
+ * z up), m/s^2, in the real machine's units. What an accelerometer bolted to
+ * the frame reads: everything acting on the craft except gravity, so +1 g on
+ * z sitting level on the ground or in a hover, and rotor drag on x and y in
+ * forward flight. Written by sim.c at the end of each step from the change in
+ * velocity across that step, contacts included, and read by bf_glue.c on the
+ * next, so the controller sees the previous sample as it does on hardware.
+ * Only BANK mode reads it. Deliberately NOT part of SimState: the state trace
+ * and the sim_state layout are unchanged by it.
+ */
+extern double SIM_ACC_BODY[3];
+
+/*
  * MOTOR POWER, set by sim_set_motor_kv: a scale on the motor's kV, the speed
  * it turns per volt. 1.0 is the motor the airframe table describes and the
  * machine every band in tests/ and gates.config.json was measured against;
@@ -427,6 +440,8 @@ void bridge_run(const SimState *s, const double rc[4], int rx_new,
  * does not read this.
  */
 void bridge_set_angle_mode(int on);
+void bridge_set_bank_mode(int on);
+int bridge_bank_mode(void);
 
 /*
  * Betaflight BOXLAUNCHCONTROL, captured the way arming captures it.

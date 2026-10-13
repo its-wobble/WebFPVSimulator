@@ -58,6 +58,7 @@
 #include "flight/mixer_init.h"
 #include "flight/pid.h"
 #include "flight/pid_init.h"
+#include "pg/bank_mode.h"
 #include "pg/dyn_notch.h"
 #include "pg/motor.h"
 #include "pg/rpm_filter.h"
@@ -118,7 +119,7 @@ static const char *const LUT_GYRO_HARDWARE_LPF[] = { "NORMAL", "OPTION_1", "OPTI
 /* common/axis.h flight_dynamics_index_t plus ALL */
 static const char *const LUT_GYRO_DEBUG_AXIS[] = { "ROLL", "PITCH", "YAW" };
 
-#define MAX_SETTINGS 200
+#define MAX_SETTINGS 220
 static BfSetting g_table[MAX_SETTINGS];
 static int g_count;
 
@@ -425,6 +426,23 @@ void bf_settings_build(void) {
    * denominator back to 1 and says so. ---- */
   U8(PARAM_NAME_PID_PROCESS_DENOM, pc->pid_process_denom);
   LUT8("runaway_takeoff_prevention", pc->runaway_takeoff_prevention, LUT_OFF_ON);
+
+  /* ---- BANK mode, flight/bank_mode.c from the its-wobble/betaflight fork.
+   * Names and fields as that fork's cli/settings.c, so a CLI paste from a
+   * board running it lands here unchanged. ---- */
+  bankModeConfig_t *bk = bankModeConfigMutable();
+  U16("bank_thrust_to_weight", bk->thrustToWeight);
+  U8("bank_max_bank_angle", bk->maxBankAngle);
+  U8("bank_max_tilt_angle", bk->maxTiltAngle);
+  U8("bank_stick_deadband", bk->stickDeadband);
+  U8("bank_head_check_range", bk->headCheckRange);
+  U16("bank_head_check_rate", bk->headCheckRate);
+  U16("bank_ball_kp", bk->ballKp);
+  U16("bank_ball_ki", bk->ballKi);
+  U16("bank_ball_deadband", bk->ballDeadband);
+  U16("bank_yaw_max_rate", bk->yawMaxRate);
+  U16("bank_speed_kp", bk->speedKp);
+  U16("bank_speed_deadband", bk->speedDeadband);
 }
 
 /*

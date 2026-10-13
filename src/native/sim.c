@@ -213,8 +213,25 @@ static void contact_build_corners(void) {
 
 SIM_EXPORT int sim_abi_version(void) { return SIM_ABI_VERSION; }
 
+double SIM_ACC_BODY[3];
+
+/* World to body, the inverse of the plant quaternion's rotation. */
+static void acc_world_to_body(const double q[4], const double v[3], double out[3]) {
+  const double w = q[0], x = -q[1], y = -q[2], z = -q[3];
+  const double tx = 2.0 * (y * v[2] - z * v[1]);
+  const double ty = 2.0 * (z * v[0] - x * v[2]);
+  const double tz = 2.0 * (x * v[1] - y * v[0]);
+  out[0] = v[0] + w * tx + (y * tz - z * ty);
+  out[1] = v[1] + w * ty + (z * tx - x * tz);
+  out[2] = v[2] + w * tz + (x * ty - y * tx);
+}
+
 static void reset_dynamics(void) {
   plant_reset(&S);
+  /* At rest the accelerometer reads gravity's reaction, straight up. */
+  SIM_ACC_BODY[0] = 0.0;
+  SIM_ACC_BODY[1] = 0.0;
+  SIM_ACC_BODY[2] = PLANT.gravity * SIM_GRAVITY;
   bridge_reset();
   g_q_head = 0;
   g_q_tail = 0;
@@ -1314,6 +1331,13 @@ SIM_EXPORT int sim_set_angle_mode(int on) {
   return SIM_OK;
 }
 
+SIM_EXPORT int sim_set_bank_mode(int on) {
+  bridge_set_bank_mode(on);
+  return SIM_OK;
+}
+
+SIM_EXPORT int sim_bank_mode(void) { return bridge_bank_mode(); }
+
 /* Flight style flag, see sim_internal.h. Not reset by reset_dynamics on
  * purpose: it is a mode, not dynamic state, same rule as angle mode. */
 int SIM_ARCADE = 0;
@@ -1456,6 +1480,7 @@ SIM_EXPORT int sim_step(int n) {
       rx_new = 1;
     }
     double duty[SIM_MOTOR_COUNT];
+    const double vel0[3] = { S.vel[0], S.vel[1], S.vel[2] };
     bridge_run(&S, g_current_rc, rx_new, duty);
     for (int m = 0; m < SIM_MOTOR_COUNT; m += 1) {
       if (g_override[m] >= 0.0) {
@@ -1493,6 +1518,20 @@ SIM_EXPORT int sim_step(int n) {
       world_step(&S, g_ground_on, g_ground_n, g_ground_d);
     }
     stand_apply();
+    /* The accelerometer, after every force and contact of the step. The
+     * scene runs len_scale times the real machine's metres, gravity
+     * included, so dividing by it gives the reading the real machine's
+     * sensor would. */
+    {
+      const double inv = 1.0 / (SIM_DT * PLANT.len_scale);
+      const double g = PLANT_W.gravity * SIM_GRAVITY;
+      const double a_world[3] = {
+        (S.vel[0] - vel0[0]) * inv,
+        (S.vel[1] - vel0[1]) * inv,
+        ((S.vel[2] - vel0[2]) / SIM_DT + g) / PLANT.len_scale,
+      };
+      acc_world_to_body(S.quat, a_world, SIM_ACC_BODY);
+    }
     /* The road vehicles' clock, here and not in world_step, because the
      * stand skips world_step and the traffic does not wait for a launch. */
     world_tick();

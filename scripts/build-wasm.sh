@@ -2,13 +2,17 @@
 # build-wasm.sh: compile the physics module to dist/sim.wasm with Emscripten.
 #
 # Betaflight IS compiled in: its controller objects are listed below and
-# linked alongside src/native. The two patches in patches/ are applied to
-# the vendor tree before those objects are built and reverted by the EXIT
-# trap afterwards, so vendor/betaflight is never modified in place and
-# `git diff --stat vendor/betaflight` must remain empty after a build.
+# linked alongside src/native. The vendor tree (Betaflight 4.5.1) is COPIED
+# into build/bf-src and the patches in patches/ are applied to that copy, so
+# vendor/betaflight is never modified, not even for the length of a build,
+# and `git diff --stat vendor/betaflight` stays empty.
 #
-# This header used to say Loop A compiled "only the stub in sim.c" and the
-# block below used to say no patches existed yet. Both were true once.
+# BANK mode comes from the owner's fork (its-wobble/betaflight, branch
+# banked-mode-init), read from BANK_BF_DIR, default ../betaflight. Its four
+# new files are copied over the 4.5.1 tree unchanged on every build, so an
+# edit in the fork's working tree flies on the next build. Its hooks into
+# rc.c, pid.c and mixer.c are patches/0003, re-fitted to 4.5.1 by hand
+# because the fork is based on 2026 master and the context lines moved.
 #
 # Determinism flags are load-bearing: no fast math, no fp contraction, no
 # relaxed SIMD. Do not remove them.
@@ -48,30 +52,39 @@ fi
 
 mkdir -p dist build/obj
 
-# Patches in patches/ are applied with git apply against the vendor tree at
-# build time and reverted after object compilation, so the tree stays clean.
-# There are two: 0001 adds the rotor telemetry the plant feeds the RPM
-# filter, and 0002 resets runtime statics on init so a re-init is a real
-# reset rather than a warm start.
+# The patches: 0001 adds the rotor telemetry the plant feeds the RPM
+# filter, 0002 resets runtime statics on init so a re-init is a real reset
+# rather than a warm start, and 0003 is BANK mode's hooks.
+BANK_BF_DIR="${BANK_BF_DIR:-../betaflight}"
+BANK_FILES="flight/bank_mode.c flight/bank_mode.h pg/bank_mode.c pg/bank_mode.h"
+for f in $BANK_FILES; do
+  if [ ! -f "$BANK_BF_DIR/src/main/$f" ]; then
+    echo "build:wasm: $BANK_BF_DIR/src/main/$f not found. Set BANK_BF_DIR to a checkout" >&2
+    echo "build:wasm: of its-wobble/betaflight banked-mode-init." >&2
+    exit 1
+  fi
+done
+BANK_REV=$(git -C "$BANK_BF_DIR" describe --always --dirty 2>/dev/null || echo unknown)
+echo "build:wasm: BANK mode from $BANK_BF_DIR at $BANK_REV"
+
+# Wiped every build so a patch that stops applying fails here rather than
+# compiling a half patched tree.
+BF=build/bf-src
+rm -rf "$BF"
+mkdir -p "$BF/src"
+cp -R vendor/betaflight/src/main "$BF/src/main"
+for f in $BANK_FILES; do
+  cp "$BANK_BF_DIR/src/main/$f" "$BF/src/main/$f"
+done
 # Strip CR before apply. Windows core.autocrlf checks the patch files out
-# as CRLF, and git apply then fails to match the LF vendor tree. The revert
-# lives in a function so the trap does not re-parse '\r' as the letter r.
-apply_vendor_patches() {
-  local reverse="${1:-}"
-  local p
-  for p in $PATCHES; do
-    if [ -n "$reverse" ]; then
-      tr -d $'\r' < "$p" | git -C vendor/betaflight apply $reverse || true
-    else
-      tr -d $'\r' < "$p" | git -C vendor/betaflight apply
-    fi
-  done
-}
-PATCHES=$(ls patches/*.patch 2>/dev/null || true)
-if [ -n "$PATCHES" ]; then
-  apply_vendor_patches
-  trap 'apply_vendor_patches -R || true' EXIT
-fi
+# as CRLF, and git apply then fails to match the LF tree. Run from the
+# repository root with --directory: build/ is inside this repository, and
+# git apply run from inside it resolves paths from the root and silently
+# skips every file.
+for p in patches/*.patch; do
+  [ -f "$p" ] || continue
+  tr -d $'\r' < "$p" | git apply --directory="$BF" -
+done
 
 CFLAGS_COMMON="-std=gnu17 -O2 -fno-fast-math -ffp-contract=off"
 
@@ -84,36 +97,40 @@ SIM_SRC="src/native/sim.c src/native/plant.c src/native/bridge.c src/native/worl
 # notch, the RPM filter and dynamic idle. All three need DShot telemetry on
 # hardware to learn rotor speed, and this simulator knows it exactly, so the
 # only thing standing between them and working was a target guard.
-BF_INC="-I vendor/betaflight/src/main/target/SITL -I vendor/betaflight/src/main -DSIMULATOR_BUILD -DSIM_ROTOR_TELEMETRY"
+# USE_BANK_MODE is defined here rather than through the fork's
+# common_post.h hunk, which gates it on the flash size of a real target.
+BF_INC="-I $BF/src/main/target/SITL -I $BF/src/main -DSIMULATOR_BUILD -DSIM_ROTOR_TELEMETRY -DUSE_BANK_MODE"
 BF_SRC="
   src/native/bf/bf_glue.c
   src/native/bf/bf_settings.c
   src/native/bf/bf_stubs.c
-  vendor/betaflight/src/main/sensors/gyro.c
-  vendor/betaflight/src/main/sensors/gyro_init.c
-  vendor/betaflight/src/main/sensors/boardalignment.c
-  vendor/betaflight/src/main/config/simplified_tuning.c
-  vendor/betaflight/src/main/fc/rc.c
-  vendor/betaflight/src/main/fc/rc_controls.c
-  vendor/betaflight/src/main/fc/rc_modes.c
-  vendor/betaflight/src/main/fc/controlrate_profile.c
-  vendor/betaflight/src/main/fc/runtime_config.c
-  vendor/betaflight/src/main/flight/pid.c
-  vendor/betaflight/src/main/flight/pid_init.c
-  vendor/betaflight/src/main/flight/mixer.c
-  vendor/betaflight/src/main/flight/mixer_init.c
-  vendor/betaflight/src/main/flight/dyn_notch_filter.c
-  vendor/betaflight/src/main/flight/rpm_filter.c
-  vendor/betaflight/src/main/common/maths.c
-  vendor/betaflight/src/main/common/filter.c
-  vendor/betaflight/src/main/common/sdft.c
-  vendor/betaflight/src/main/common/bitarray.c
-  vendor/betaflight/src/main/pg/rx.c
-  vendor/betaflight/src/main/pg/motor.c
-  vendor/betaflight/src/main/pg/dyn_notch.c
-  vendor/betaflight/src/main/pg/rpm_filter.c
-  vendor/betaflight/src/main/config/feature.c
-  vendor/betaflight/src/main/build/debug.c
+  $BF/src/main/sensors/gyro.c
+  $BF/src/main/sensors/gyro_init.c
+  $BF/src/main/sensors/boardalignment.c
+  $BF/src/main/config/simplified_tuning.c
+  $BF/src/main/fc/rc.c
+  $BF/src/main/fc/rc_controls.c
+  $BF/src/main/fc/rc_modes.c
+  $BF/src/main/fc/controlrate_profile.c
+  $BF/src/main/fc/runtime_config.c
+  $BF/src/main/flight/pid.c
+  $BF/src/main/flight/pid_init.c
+  $BF/src/main/flight/mixer.c
+  $BF/src/main/flight/mixer_init.c
+  $BF/src/main/flight/dyn_notch_filter.c
+  $BF/src/main/flight/rpm_filter.c
+  $BF/src/main/flight/bank_mode.c
+  $BF/src/main/pg/bank_mode.c
+  $BF/src/main/common/maths.c
+  $BF/src/main/common/filter.c
+  $BF/src/main/common/sdft.c
+  $BF/src/main/common/bitarray.c
+  $BF/src/main/pg/rx.c
+  $BF/src/main/pg/motor.c
+  $BF/src/main/pg/dyn_notch.c
+  $BF/src/main/pg/rpm_filter.c
+  $BF/src/main/config/feature.c
+  $BF/src/main/build/debug.c
 "
 
 OBJS=""

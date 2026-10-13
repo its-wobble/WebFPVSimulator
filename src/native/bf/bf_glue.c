@@ -65,15 +65,18 @@
 #include "fc/rc_modes.h"
 #include "fc/runtime_config.h"
 #include "flight/imu.h"
+#include "flight/bank_mode.h"
 #include "flight/dyn_notch_filter.h"
 #include "flight/mixer.h"
 #include "flight/mixer_init.h"
 #include "flight/pid.h"
 #include "flight/pid_init.h"
 #include "flight/rpm_filter.h"
+#include "pg/bank_mode.h"
 #include "pg/motor.h"
 #include "pg/rx.h"
 #include "rx/rx.h"
+#include "sensors/acceleration.h"
 #include "sensors/gyro.h"
 #include "sensors/gyro_init.h"
 #include "sensors/sensors.h"
@@ -110,6 +113,7 @@ extern void pgResetFn_gyroConfig(gyroConfig_t *gyroConfig);
 extern const pidConfig_t pgResetTemplate_pidConfig;
 extern const dynNotchConfig_t pgResetTemplate_dynNotchConfig;
 extern const rpmFilterConfig_t pgResetTemplate_rpmFilterConfig;
+extern const bankModeConfig_t pgResetTemplate_bankModeConfig;
 
 /*
  * ---- The gyro device ----
@@ -425,6 +429,7 @@ void bf_config_begin(void) {
   *dynNotchConfigMutable() = pgResetTemplate_dynNotchConfig;
   *rpmFilterConfigMutable() = pgResetTemplate_rpmFilterConfig;
   *pidConfigMutable() = pgResetTemplate_pidConfig;
+  *bankModeConfigMutable() = pgResetTemplate_bankModeConfig;
   resetPidProfile(pidProfilesMutable(0));
 
   currentPidProfile = pidProfilesMutable(0);
@@ -526,6 +531,10 @@ static void bf_runtime_init(void) {
    * is still gated on isLaunchControlActive, which stays false unless
    * the shell asks, so the harness acro path does not change. */
   sensorsSet(SENSOR_ACC);
+  /* 2048 counts per g, a 16 g full scale on a 16 bit part, which is what
+   * an ICM-42688 reports and what SITL's virtual accelerometer uses. */
+  acc.dev.acc_1G = 2048;
+  acc.dev.acc_1G_rec = 1.0f / 2048.0f;
 
   pidInit(currentPidProfile);
   pidResetTransientState();
@@ -690,6 +699,16 @@ double sim_bf_debug(int what) {
   case 68: return PLANT_DBG_DUCT;
   case 69: return PLANT_DBG_VPERP;
   case 70: return PLANT_DBG_PITCH_UP;
+  /* BANK mode: what its accelerometer reads, in g, and what it commands. */
+  case 71: return acc.accADC.x * acc.dev.acc_1G_rec;
+  case 72: return acc.accADC.y * acc.dev.acc_1G_rec;
+  case 73: return acc.accADC.z * acc.dev.acc_1G_rec;
+  case 74: return bankModeGetAngleTarget(FD_ROLL);
+  case 75: return bankModeGetAngleTarget(FD_PITCH);
+  case 76: return bankModeGetYawRate();
+  case 77: return bankModeGetCollective();
+  case 78: return attitude.values.roll * 0.1;
+  case 79: return attitude.values.pitch * 0.1;
   default: return 0.0;
   }
 }
@@ -741,6 +760,54 @@ int sim_bf_get(const char *key, char *out, int cap) {
  * so the acro trajectory does not run atan2 or touch flightModeFlags.
  */
 static int g_angle_mode = 0;
+
+/*
+ * BANK MODE, the owner's new flight mode, from its-wobble/betaflight branch
+ * banked-mode-init (flight/bank_mode.c, compiled unchanged). Kept off the
+ * acro path like angle mode: g_bank_mode defaults to 0 and the harness never
+ * calls sim_set_bank_mode.
+ *
+ * The fork switches it in fc/core.c's processRxModes, which this build does
+ * not compile, so the rule is copied here: BANK takes priority over ANGLE
+ * (and HORIZON, which this build never raises), needs the accelerometer and
+ * yields to failsafe, which never fires here. processRxModes runs once per
+ * receiver frame, before updateRcCommands, and so does bankModeUpdate below.
+ * It reads attitude, which comes from the plant as for angle mode, and the
+ * accelerometer, which comes from sim.c's SIM_ACC_BODY.
+ */
+static int g_bank_mode = 0;
+
+static void bf_apply_bank_mode_flag(void) {
+  if (g_bank_mode && sensors(SENSOR_ACC)) {
+    flightModeFlags |= BANK_MODE;
+    flightModeFlags &= (uint16_t)~ANGLE_MODE;
+  } else {
+    flightModeFlags &= (uint16_t)~BANK_MODE;
+  }
+}
+
+/* The switch only. The flag follows on the next receiver frame, which is
+ * when processRxModes reads an aux switch on hardware. */
+void bridge_set_bank_mode(int on) {
+  g_bank_mode = on ? 1 : 0;
+}
+
+int bridge_bank_mode(void) {
+  return FLIGHT_MODE(BANK_MODE) ? 1 : 0;
+}
+
+/* Plant specific force to Betaflight's accelerometer, in counts of
+ * acc_1G. Both frames are x forward, y left, z up, so no axis changes here.
+ * SIM_ACC_BODY is m/s^2 in the real machine's units; one g is the plant's
+ * own gravity times the gravity scale, so a hover reads one g on any map. */
+static void bf_feed_acc(void) {
+  const double g = PLANT.gravity * SIM_GRAVITY;
+  const double k = (g > 0.0 ? (double)acc.dev.acc_1G / g : 0.0);
+  for (int a = 0; a < XYZ_AXIS_COUNT; a += 1) {
+    acc.accADC.v[a] = (float)(SIM_ACC_BODY[a] * k);
+  }
+  acc.isAccelUpdatedAtLeastOnce = true;
+}
 
 /*
  * LAUNCH CONTROL, kept off the acro path the same way.
@@ -902,6 +969,9 @@ void bridge_reset(void) {
    * control switch that was on is a fresh arm rather than a latched
    * trigger from the previous sitting. */
   bf_apply_angle_mode_flag();
+  /* A reset is a fresh arm: BANK starts again from its own reset on the
+   * first frame, as the fork does when the mode is engaged. */
+  flightModeFlags &= (uint16_t)~BANK_MODE;
   if (g_launch_switch) {
     g_launch_state = LAUNCH_CONTROL_ACTIVE;
   } else {
@@ -984,7 +1054,12 @@ void bridge_run(const SimState *s, const double rc[4], int rx_new,
    * is not reached. Launch control needs attitude for the optional
    * angle limit and needs ANGLE_MODE down, which is Betaflight's own
    * canUseLaunchControl rule. */
-  if (g_launch_state == LAUNCH_CONTROL_ACTIVE) {
+  if (g_bank_mode || FLIGHT_MODE(BANK_MODE)) {
+    /* BANK owns roll, pitch, yaw and collective. Launch control is not
+     * combined with it: the fork leaves that interaction open. */
+    bf_feed_attitude(s);
+    bf_feed_acc();
+  } else if (g_launch_state == LAUNCH_CONTROL_ACTIVE) {
     flightModeFlags &= (uint16_t)~ANGLE_MODE;
     bf_feed_attitude(s);
     if (currentPidProfile
@@ -1016,6 +1091,17 @@ void bridge_run(const SimState *s, const double rc[4], int rx_new,
 
   if (rx_new) {
     updateRcRefreshRate(now_us);
+    /* processRxModes, then updateRcCommands: fc/tasks.c's receiver task
+     * order. bankModeUpdate resets itself when BANK_MODE is down, and is
+     * only called once the mode has ever been asked for, so the acro and
+     * angle trajectories never run it. */
+    if (g_bank_mode || FLIGHT_MODE(BANK_MODE) || bankModeIsActive()) {
+      bf_apply_bank_mode_flag();
+      if (!FLIGHT_MODE(BANK_MODE)) {
+        bf_apply_angle_mode_flag();
+      }
+      bankModeUpdate(now_us);
+    }
     updateRcCommands();
   }
   processRcCommand();

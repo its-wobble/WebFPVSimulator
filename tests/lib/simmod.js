@@ -86,6 +86,8 @@ export async function loadSim(wasmBytes) {
     'sim_motor_override',
     'sim_rest',
     'sim_set_angle_mode',
+    'sim_set_bank_mode',
+    'sim_bank_mode',
     'sim_set_launch_control',
     'sim_launch_control_state',
     'sim_state_size',
@@ -158,6 +160,16 @@ export class Sim {
   /* Betaflight ANGLE_MODE. 0 is acro. See sim_abi.h. */
   setAngleMode(on) {
     return this.e.sim_set_angle_mode(on ? 1 : 0);
+  }
+
+  /* BANK mode from the its-wobble/betaflight fork. 0 is off. Takes
+   * priority over angle mode. See sim_abi.h. */
+  setBankMode(on) {
+    return this.e.sim_set_bank_mode(on ? 1 : 0);
+  }
+
+  bankMode() {
+    return this.e.sim_bank_mode();
   }
 
   /* Betaflight launch control. 0 is off. See sim_abi.h. */
