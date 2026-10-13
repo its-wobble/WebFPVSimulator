@@ -4968,6 +4968,11 @@ export async function boot({ loading, bootStart, mapId }) {
    * Changing this does not re-init the module and does not reset the craft.
    */
   let angleModeOn = false;
+  /* BANK MODE, the banked-mode-init fork's attitude mode, is the third value
+   * of the Flight mode row. Same kind of flag as angle (sim_set_bank_mode),
+   * and it replaces angle while it is on. Only the Flight mode row can pick
+   * it: the keyboard's own row stays acro or angle. */
+  let bankModeOn = false;
   /* L-switch for launch control. The Settings row only enables the
    * feature; this is the mode switch, captured at the sitting. */
   let lcArmed = false;
@@ -5055,6 +5060,20 @@ export async function boot({ loading, bootStart, mapId }) {
       return false;
     }
     return ui.settings[flightModeSetting()] === 'angle';
+  }
+
+  function wantBankMode() {
+    if (crashflipOn || turtleRecover) {
+      return false;
+    }
+    if (lcAcroUntil === Infinity || (lcAcroUntil > 0 && performance.now() < lcAcroUntil)) {
+      return false;
+    }
+    return ui.settings[flightModeSetting()] === 'bank';
+  }
+
+  function liveFlightMode() {
+    return bankModeOn ? 'bank' : (angleModeOn ? 'angle' : 'acro');
   }
 
   /*
@@ -5213,10 +5232,17 @@ export async function boot({ loading, bootStart, mapId }) {
       angleModeOn = want;
       sim.setAngleMode(want);
     }
+    const wantBank = wantBankMode();
+    if (wantBank !== bankModeOn) {
+      bankModeOn = wantBank;
+      sim.setBankMode(wantBank);
+    }
     if (ui.setCraftCaption && !(showcase && showcase.failed)) {
-      ui.setCraftCaption(want
-        ? 'Angle. Sticks are tilt. Hands off levels.'
-        : 'Acro. Sticks are rates. Hands off holds.');
+      ui.setCraftCaption(wantBank
+        ? 'Bank. Roll banks, pitch is speed, throttle is lift.'
+        : (want
+          ? 'Angle. Sticks are tilt. Hands off levels.'
+          : 'Acro. Sticks are rates. Hands off holds.'));
     }
   }
 
@@ -9787,7 +9813,7 @@ export async function boot({ loading, bootStart, mapId }) {
          * See osdSpeed in configs/airframes.js. */
         speedKph: airframeById(runAirframe).osdSpeed ? speed * 3.6 : null,
         throttle: input.channels.throttle,
-        flightMode: (turtleWait || turtleFlip.active) ? 'turtle' : (angleModeOn ? 'angle' : 'acro'),
+        flightMode: (turtleWait || turtleFlip.active) ? 'turtle' : liveFlightMode(),
         /* No damage model, so nothing to count down. How much this run has
          * bounced is still worth telling a pilot, and the OSD says nothing
          * at all until there is something to say. */
@@ -10858,7 +10884,7 @@ export async function boot({ loading, bootStart, mapId }) {
   };
   /* Which control mode the plant is actually in. A rig that thinks it is
    * flying acro and is not measures nothing: angle cannot loop. */
-  window.__flightMode = () => (angleModeOn ? 'angle' : 'acro');
+  window.__flightMode = () => liveFlightMode();
   /*
    * The air, READ BACK OUT OF THE MODULE rather than out of the menu, which
    * is the same discipline the PIDs panel keeps: a slider that stopped
@@ -11558,7 +11584,7 @@ export async function boot({ loading, bootStart, mapId }) {
      * said "acro". Inside `stick` rather than beside it, because the board
      * caps a report at 32 top level keys.
      */
-    flying: angleModeOn ? 'angle' : 'acro',
+    flying: liveFlightMode(),
     keyRaceMode: ui.settings.keyRaceMode,
     keyThrottle: input.keyThrottle,
     keyHover: Math.round(input.kbHover * 1000) / 10,

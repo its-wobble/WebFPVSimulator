@@ -198,6 +198,7 @@ const PG_TAB = {
   GYRO_CONFIG: 'pid',
   DYN_NOTCH_CONFIG: 'pid',
   RPM_FILTER_CONFIG: 'pid',
+  BANK_MODE_CONFIG: 'pid',
   PID: 'pid',
   PID_PROFILE: 'pid',
   PID_CONFIG: 'configuration',

@@ -983,6 +983,9 @@ void plant_reset(SimState *s) {
    * which is the whole point. */
   s->wash_seed = 0x9E3779B9u;
   s->pack_current = 0.0;
+  s->spec_force_g[0] = 0.0;
+  s->spec_force_g[1] = 0.0;
+  s->spec_force_g[2] = 0.0;
   s->vbat_load = s->cell_voltage_oc * PLANT.cells;
   /* No floor until the host raises one. See ground_h in sim_internal.h. */
   s->ground_h = -1.0;
@@ -1830,6 +1833,14 @@ void plant_step(SimState *s, const double duty_in[SIM_MOTOR_COUNT]) {
   double f_world[3];
   quat_rotate(s->quat, f_body, f_world);
   const double inv_m = 1.0 / PLANT.mass_kg;
+  /* The accelerometer's view of the same force, real units, before the
+   * scene scaling below. See spec_force_g in sim_internal.h. */
+  {
+    const double inv_mg = inv_m / 9.80665;
+    s->spec_force_g[0] = f_body[0] * inv_mg;
+    s->spec_force_g[1] = f_body[1] * inv_mg;
+    s->spec_force_g[2] = f_body[2] * inv_mg;
+  }
   /* And back: the force is the real machine's, the room is in scene metres,
    * so its acceleration there is len times larger, gravity included. */
   s->vel[0] += f_world[0] * inv_m * len * SIM_DT;

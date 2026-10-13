@@ -56,7 +56,26 @@ const rows = table.map((row) => ({
  * here is a decision, not a default.
  */
 const extra = live.filter((k) => !table.some((r) => r.key === k));
-const unexpected = extra.filter((k) => !/^rpm_filter_weights_[123]$/.test(k));
+/*
+ * Keys from the banked-mode-init fork, not in the 4.5.1 valueTable. Type
+ * and limits are the fork's own cli/settings.c rows, so the Configurator
+ * style fields clamp the same way the fork's CLI does.
+ */
+const FORK_ONLY = {
+  bank_thrust_to_weight: ['UINT16', '110', '1000'],
+  bank_max_bank_angle: ['UINT8', '5', '80'],
+  bank_max_tilt_angle: ['UINT8', '5', '60'],
+  bank_stick_deadband: ['UINT8', '0', '25'],
+  bank_head_check_range: ['UINT8', '0', '180'],
+  bank_head_check_rate: ['UINT16', '30', '1000'],
+  bank_ball_kp: ['UINT16', '0', '2000'],
+  bank_ball_ki: ['UINT16', '0', '2000'],
+  bank_ball_deadband: ['UINT16', '0', '500'],
+  bank_yaw_max_rate: ['UINT16', '30', '1000'],
+  bank_speed_kp: ['UINT16', '0', '1000'],
+  bank_speed_deadband: ['UINT16', '0', '500'],
+};
+const unexpected = extra.filter((k) => !/^rpm_filter_weights_[123]$/.test(k) && !FORK_ONLY[k]);
 if (unexpected.length) {
   throw new Error(
     `fc-catalog-gen: ${unexpected.length} key(s) in bf_settings.c are not in the `
@@ -66,13 +85,14 @@ if (unexpected.length) {
   );
 }
 for (const key of extra) {
+  const fork = FORK_ONLY[key];
   rows.push({
     key,
-    type: 'UINT8',
+    type: fork ? fork[0] : 'UINT8',
     lookup: null,
-    pg: 'RPM_FILTER_CONFIG',
-    min: null,
-    max: null,
+    pg: fork ? 'BANK_MODE_CONFIG' : 'RPM_FILTER_CONFIG',
+    min: fork ? fork[1] : null,
+    max: fork ? fork[2] : null,
     array: false,
     live: true,
   });

@@ -6851,6 +6851,126 @@ export const VALUE_TABLE = [
     "live": false
   },
   {
+    "key": "bank_thrust_to_weight",
+    "type": "UINT16",
+    "lookup": null,
+    "pg": "BANK_MODE_CONFIG",
+    "min": "110",
+    "max": "1000",
+    "array": false,
+    "live": true
+  },
+  {
+    "key": "bank_max_bank_angle",
+    "type": "UINT8",
+    "lookup": null,
+    "pg": "BANK_MODE_CONFIG",
+    "min": "5",
+    "max": "80",
+    "array": false,
+    "live": true
+  },
+  {
+    "key": "bank_max_tilt_angle",
+    "type": "UINT8",
+    "lookup": null,
+    "pg": "BANK_MODE_CONFIG",
+    "min": "5",
+    "max": "60",
+    "array": false,
+    "live": true
+  },
+  {
+    "key": "bank_stick_deadband",
+    "type": "UINT8",
+    "lookup": null,
+    "pg": "BANK_MODE_CONFIG",
+    "min": "0",
+    "max": "25",
+    "array": false,
+    "live": true
+  },
+  {
+    "key": "bank_head_check_range",
+    "type": "UINT8",
+    "lookup": null,
+    "pg": "BANK_MODE_CONFIG",
+    "min": "0",
+    "max": "180",
+    "array": false,
+    "live": true
+  },
+  {
+    "key": "bank_head_check_rate",
+    "type": "UINT16",
+    "lookup": null,
+    "pg": "BANK_MODE_CONFIG",
+    "min": "30",
+    "max": "1000",
+    "array": false,
+    "live": true
+  },
+  {
+    "key": "bank_ball_kp",
+    "type": "UINT16",
+    "lookup": null,
+    "pg": "BANK_MODE_CONFIG",
+    "min": "0",
+    "max": "2000",
+    "array": false,
+    "live": true
+  },
+  {
+    "key": "bank_ball_ki",
+    "type": "UINT16",
+    "lookup": null,
+    "pg": "BANK_MODE_CONFIG",
+    "min": "0",
+    "max": "2000",
+    "array": false,
+    "live": true
+  },
+  {
+    "key": "bank_ball_deadband",
+    "type": "UINT16",
+    "lookup": null,
+    "pg": "BANK_MODE_CONFIG",
+    "min": "0",
+    "max": "500",
+    "array": false,
+    "live": true
+  },
+  {
+    "key": "bank_yaw_max_rate",
+    "type": "UINT16",
+    "lookup": null,
+    "pg": "BANK_MODE_CONFIG",
+    "min": "30",
+    "max": "1000",
+    "array": false,
+    "live": true
+  },
+  {
+    "key": "bank_speed_kp",
+    "type": "UINT16",
+    "lookup": null,
+    "pg": "BANK_MODE_CONFIG",
+    "min": "0",
+    "max": "1000",
+    "array": false,
+    "live": true
+  },
+  {
+    "key": "bank_speed_deadband",
+    "type": "UINT16",
+    "lookup": null,
+    "pg": "BANK_MODE_CONFIG",
+    "min": "0",
+    "max": "500",
+    "array": false,
+    "live": true
+  },
+  {
     "key": "rpm_filter_weights_1",
     "type": "UINT8",
     "lookup": null,

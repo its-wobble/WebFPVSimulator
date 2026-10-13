@@ -71,9 +71,12 @@
 #include "flight/pid.h"
 #include "flight/pid_init.h"
 #include "flight/rpm_filter.h"
+#include "flight/bank_mode.h"
+#include "pg/bank_mode.h"
 #include "pg/motor.h"
 #include "pg/rx.h"
 #include "rx/rx.h"
+#include "sensors/acceleration.h"
 #include "sensors/gyro.h"
 #include "sensors/gyro_init.h"
 #include "sensors/sensors.h"
@@ -109,6 +112,7 @@ extern void pgResetFn_mixerConfig(mixerConfig_t *mixerConfig);
 extern void pgResetFn_gyroConfig(gyroConfig_t *gyroConfig);
 extern const pidConfig_t pgResetTemplate_pidConfig;
 extern const dynNotchConfig_t pgResetTemplate_dynNotchConfig;
+extern const bankModeConfig_t pgResetTemplate_bankModeConfig;
 extern const rpmFilterConfig_t pgResetTemplate_rpmFilterConfig;
 
 /*
@@ -423,6 +427,9 @@ void bf_config_begin(void) {
   pgResetFn_mixerConfig(mixerConfigMutable());
   pgResetFn_gyroConfig(gyroConfigMutable());
   *dynNotchConfigMutable() = pgResetTemplate_dynNotchConfig;
+  *bankModeConfigMutable() = pgResetTemplate_bankModeConfig;
+  acc.dev.acc_1G = 256;
+  acc.dev.acc_1G_rec = 1.0f / 256.0f;
   *rpmFilterConfigMutable() = pgResetTemplate_rpmFilterConfig;
   *pidConfigMutable() = pgResetTemplate_pidConfig;
   resetPidProfile(pidProfilesMutable(0));
@@ -743,6 +750,29 @@ int sim_bf_get(const char *key, char *out, int cap) {
 static int g_angle_mode = 0;
 
 /*
+ * BANK MODE, kept off the acro path the same way.
+ *
+ * The logic is the banked-mode-init fork's flight/bank_mode.c, brought in by
+ * patches/0003-bank-mode-hooks.patch with its pid.c, mixer.c and rc.c hooks.
+ * fc/core.c is not compiled, so the part of processRxModes that raises
+ * BANK_MODE and calls bankModeUpdate is here. Its gate has nothing to test
+ * in this simulator (no failsafe, no GPS rescue, no 3D, not a wing, ACC
+ * present), so it reduces to the shell's switch. BANK is an alternative to
+ * ANGLE, as in the fork: while it is on, ANGLE_MODE is down.
+ *
+ * It reads two things the acro path never needed. Attitude comes from the
+ * plant quaternion as for angle mode. The accelerometer is synthesised
+ * from the plant's specific force (spec_force_g), body axes, in g, which
+ * is what an accelerometer on the frame reads: thrust plus drag, no
+ * gravity term beyond what the thrust already carries.
+ *
+ * g_bank_mode defaults to 0. The harness never calls sim_set_bank_mode,
+ * so the acro trajectory never touches the flag, the accelerometer or
+ * any bank code.
+ */
+static int g_bank_mode = 0;
+
+/*
  * LAUNCH CONTROL, kept off the acro path the same way.
  *
  * pid.c and mixer.c already compiled the hold, the idle-throttle mixer
@@ -868,6 +898,31 @@ void bridge_set_angle_mode(int on) {
   bf_apply_angle_mode_flag();
 }
 
+static void bf_feed_accelerometer(const SimState *s) {
+  for (int a = 0; a < XYZ_AXIS_COUNT; a += 1) {
+    acc.accADC[a] = (float)(s->spec_force_g[a] * 256.0);
+  }
+}
+
+static void bf_apply_bank_mode_flag(void) {
+  if (g_bank_mode) {
+    flightModeFlags |= BANK_MODE;
+    flightModeFlags &= (uint16_t)~ANGLE_MODE;
+  } else {
+    flightModeFlags &= (uint16_t)~BANK_MODE;
+    /* Not active, so this only resets the bank state. */
+    bankModeUpdate(0);
+  }
+}
+
+void bridge_set_bank_mode(int on) {
+  g_bank_mode = on ? 1 : 0;
+  bf_apply_bank_mode_flag();
+  if (!g_bank_mode) {
+    bf_apply_angle_mode_flag();
+  }
+}
+
 void bridge_reset(void) {
   /* Fresh controller state for a fresh trajectory: re run the init chain
    * so PID integrators, filters and rc state start identically. */
@@ -902,6 +957,9 @@ void bridge_reset(void) {
    * control switch that was on is a fresh arm rather than a latched
    * trigger from the previous sitting. */
   bf_apply_angle_mode_flag();
+  if (g_bank_mode) {
+    bf_apply_bank_mode_flag();
+  }
   if (g_launch_switch) {
     g_launch_state = LAUNCH_CONTROL_ACTIVE;
   } else {
@@ -993,6 +1051,11 @@ void bridge_run(const SimState *s, const double rc[4], int rx_new,
       g_launch_state = LAUNCH_CONTROL_TRIGGERED;
       pidResetIterm();
     }
+  } else if (g_bank_mode) {
+    bf_apply_bank_mode_flag();
+    bf_feed_attitude(s);
+    bf_feed_accelerometer(s);
+    bankModeUpdate(now_us);
   } else if (g_angle_mode) {
     bf_apply_angle_mode_flag();
     bf_feed_attitude(s);

@@ -58,6 +58,7 @@
 #include "flight/mixer_init.h"
 #include "flight/pid.h"
 #include "flight/pid_init.h"
+#include "pg/bank_mode.h"
 #include "pg/dyn_notch.h"
 #include "pg/motor.h"
 #include "pg/rpm_filter.h"
@@ -165,6 +166,21 @@ void bf_settings_build(void) {
   pidConfig_t *pc = pidConfigMutable();
   dynNotchConfig_t *dn = dynNotchConfigMutable();
   rpmFilterConfig_t *rf = rpmFilterConfigMutable();
+  bankModeConfig_t *bk = bankModeConfigMutable();
+
+  /* ---- Bank mode, flight/bank_mode.c from the banked-mode-init fork ---- */
+  U16("bank_thrust_to_weight", bk->thrustToWeight);
+  U8("bank_max_bank_angle", bk->maxBankAngle);
+  U8("bank_max_tilt_angle", bk->maxTiltAngle);
+  U8("bank_stick_deadband", bk->stickDeadband);
+  U8("bank_head_check_range", bk->headCheckRange);
+  U16("bank_head_check_rate", bk->headCheckRate);
+  U16("bank_ball_kp", bk->ballKp);
+  U16("bank_ball_ki", bk->ballKi);
+  U16("bank_ball_deadband", bk->ballDeadband);
+  U16("bank_yaw_max_rate", bk->yawMaxRate);
+  U16("bank_speed_kp", bk->speedKp);
+  U16("bank_speed_deadband", bk->speedDeadband);
 
   /* ---- PID gains, flight/pid.c ---- */
   U8("p_roll", p->pid[PID_ROLL].P);

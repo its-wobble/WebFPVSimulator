@@ -534,7 +534,7 @@ function cycle(list, value, dir) {
  */
 export const SETTINGS_KEY = 'webfpv.settings.v3';
 
-export const FLIGHT_MODES = ['acro', 'angle'];
+export const FLIGHT_MODES = ['acro', 'angle', 'bank'];
 /* Auto reset's wait, in seconds, from the craft going down to the run
  * restarting. One second is the preselected one. See autoResetTick in
  * src/main.js. */
@@ -1676,7 +1676,7 @@ export function loadSettings() {
       s[k] = stored[k];
     }
   }
-  if (s.flightMode !== 'angle') {
+  if (s.flightMode !== 'angle' && s.flightMode !== 'bank') {
     s.flightMode = 'acro';
   }
   if (s.keyRaceMode !== 'acro') {
@@ -9248,10 +9248,10 @@ export class Ui {
         { label: 'Flight', section: true },
         choice(
           'Flight mode',
-          'Acro: sticks are rates, hands off holds attitude. Angle: sticks are tilt, hands off levels. A radio, a gamepad, thumb sticks and every freestyle flight fly this one, because Angle holds the craft to about thirty degrees of bank and no trick in the book can be flown in it. M in flight switches whichever one you are flying, and keeps it.',
+          'Acro: sticks are rates, hands off holds attitude. Angle: sticks are tilt, hands off levels. A radio, a gamepad, thumb sticks and every freestyle flight fly this one, because Angle holds the craft to about thirty degrees of bank and no trick in the book can be flown in it. M in flight switches whichever one you are flying, and keeps it. Bank (experimental, from the banked-mode-init Betaflight fork): roll banks the craft into a coordinated turn, pitch sets forward speed, throttle sets lift with the centre holding one g, and yaw is a head check.',
           FLIGHT_MODES,
-          s.flightMode === 'angle' ? 'angle' : 'acro',
-          (id) => (id === 'angle' ? 'Angle' : 'Acro'),
+          s.flightMode === 'angle' || s.flightMode === 'bank' ? s.flightMode : 'acro',
+          (id) => (id === 'angle' ? 'Angle' : (id === 'bank' ? 'Bank' : 'Acro')),
           (id) => { s.flightMode = id; },
         ),
         /*
@@ -15122,7 +15122,7 @@ export class Ui {
         ? 'Turtle'
         : (launchState === 1 || launchState === 2
           ? 'Launch'
-          : (flightMode === 'angle' ? 'Angle' : 'Acro'));
+          : (flightMode === 'bank' ? 'Bank' : (flightMode === 'angle' ? 'Angle' : 'Acro')));
       Ui.text(this.osdFlight, modeText);
       Ui.text(this.osdFlightTouch, modeText);
     }

@@ -1314,6 +1314,11 @@ SIM_EXPORT int sim_set_angle_mode(int on) {
   return SIM_OK;
 }
 
+SIM_EXPORT int sim_set_bank_mode(int on) {
+  bridge_set_bank_mode(on);
+  return SIM_OK;
+}
+
 /* Flight style flag, see sim_internal.h. Not reset by reset_dynamics on
  * purpose: it is a mode, not dynamic state, same rule as angle mode. */
 int SIM_ARCADE = 0;

@@ -2,7 +2,7 @@
 # build-wasm.sh: compile the physics module to dist/sim.wasm with Emscripten.
 #
 # Betaflight IS compiled in: its controller objects are listed below and
-# linked alongside src/native. The two patches in patches/ are applied to
+# linked alongside src/native. The patches in patches/ are applied to
 # the vendor tree before those objects are built and reverted by the EXIT
 # trap afterwards, so vendor/betaflight is never modified in place and
 # `git diff --stat vendor/betaflight` must remain empty after a build.
@@ -50,9 +50,11 @@ mkdir -p dist build/obj
 
 # Patches in patches/ are applied with git apply against the vendor tree at
 # build time and reverted after object compilation, so the tree stays clean.
-# There are two: 0001 adds the rotor telemetry the plant feeds the RPM
-# filter, and 0002 resets runtime statics on init so a re-init is a real
-# reset rather than a warm start.
+# There are three: 0001 adds the rotor telemetry the plant feeds the RPM
+# filter, 0002 resets runtime statics on init so a re-init is a real
+# reset rather than a warm start, and 0003 adds the hooks for the banked-mode-init
+# fork's bank mode, whose sources are in src/native/bf/bank (regenerate them
+# with scripts/sync-bank-mode.sh).
 # Strip CR before apply. Windows core.autocrlf checks the patch files out
 # as CRLF, and git apply then fails to match the LF vendor tree. The revert
 # lives in a function so the trap does not re-parse '\r' as the letter r.
@@ -84,7 +86,7 @@ SIM_SRC="src/native/sim.c src/native/plant.c src/native/bridge.c src/native/worl
 # notch, the RPM filter and dynamic idle. All three need DShot telemetry on
 # hardware to learn rotor speed, and this simulator knows it exactly, so the
 # only thing standing between them and working was a target guard.
-BF_INC="-I vendor/betaflight/src/main/target/SITL -I vendor/betaflight/src/main -DSIMULATOR_BUILD -DSIM_ROTOR_TELEMETRY"
+BF_INC="-I vendor/betaflight/src/main/target/SITL -I vendor/betaflight/src/main -DSIMULATOR_BUILD -DSIM_ROTOR_TELEMETRY -DUSE_BANK_MODE -I src/native/bf/bank"
 BF_SRC="
   src/native/bf/bf_glue.c
   src/native/bf/bf_settings.c
@@ -104,6 +106,7 @@ BF_SRC="
   vendor/betaflight/src/main/flight/mixer_init.c
   vendor/betaflight/src/main/flight/dyn_notch_filter.c
   vendor/betaflight/src/main/flight/rpm_filter.c
+  src/native/bf/bank/flight/bank_mode.c
   vendor/betaflight/src/main/common/maths.c
   vendor/betaflight/src/main/common/filter.c
   vendor/betaflight/src/main/common/sdft.c
@@ -112,6 +115,7 @@ BF_SRC="
   vendor/betaflight/src/main/pg/motor.c
   vendor/betaflight/src/main/pg/dyn_notch.c
   vendor/betaflight/src/main/pg/rpm_filter.c
+  src/native/bf/bank/pg/bank_mode.c
   vendor/betaflight/src/main/config/feature.c
   vendor/betaflight/src/main/build/debug.c
 "

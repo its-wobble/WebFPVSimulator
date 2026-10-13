@@ -49,6 +49,13 @@ accelerometerConfig_t accelerometerConfig_System;
  * compiling the AHRS. */
 attitudeEulerAngles_t attitude;
 
+/* Accelerometer reading. Acro and angle mode never read it. Bank mode reads
+ * accADC for its drag and ball loops, and bf_glue.c fills it from the
+ * plant's specific force, in the same 1 g = 256 counts the real driver
+ * default uses. sensors/acceleration.c is not compiled, so this is its
+ * storage. */
+acc_t acc;
+
 bool failsafeIsActive(void) { return false; }
 
 const lowVoltageCutoff_t *getLowVoltageCutoff(void) {

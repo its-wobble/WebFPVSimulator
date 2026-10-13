@@ -275,6 +275,17 @@ int sim_set_pose(double px, double py, double pz,
 int sim_set_angle_mode(int on);
 
 /*
+ * Enable or disable Betaflight BANK mode, the banked-track attitude mode
+ * from the banked-mode-init fork (patches/0003-bank-mode-hooks.patch). Off (0) is
+ * the default and the path every harness replay takes. On raises BANK_MODE,
+ * which replaces ANGLE_MODE while it is set: roll is bank, pitch is forward
+ * speed, yaw is a head check, throttle is vertical lift. It reads a
+ * synthesised accelerometer (plant specific force) and the plant attitude.
+ * Additive ABI change, version unchanged, same rule as sim_set_angle_mode.
+ */
+int sim_set_bank_mode(int on);
+
+/*
  * Enable or disable Betaflight launch control, the race-start hold.
  * Off (0) is the default, and the path every harness replay takes.
  * On (non-zero) is BOXLAUNCHCONTROL at arm: pid.c's applyLaunchControl

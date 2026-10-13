@@ -207,6 +207,15 @@ typedef struct {
   double cell_voltage_oc; /* open circuit per cell, volts */
   double pack_current;    /* total draw last step, amps */
   double vbat_load;       /* pack voltage under load, volts */
+  /* What an accelerometer on the frame would read, body axes (x forward, y
+   * left, z up), in g: the sum of every force plant_step puts on the body
+   * (thrust, airframe drag, rotor H force, axial brake) over mass and g.
+   * Gravity is not in it, as for a real accelerometer in free fall, and the
+   * ground's contact force is not in it either, since sim.c applies that
+   * outside plant_step. Written by plant_step, read by bf_glue.c for bank
+   * mode, which is the first consumer. Not part of the exported state or the
+   * trace, so adding it moves no replay hash. */
+  double spec_force_g[3];
   /* time */
   long long step_index; /* completed 1 ms steps since reset */
 } SimState;
@@ -427,6 +436,7 @@ void bridge_run(const SimState *s, const double rc[4], int rx_new,
  * does not read this.
  */
 void bridge_set_angle_mode(int on);
+void bridge_set_bank_mode(int on);
 
 /*
  * Betaflight BOXLAUNCHCONTROL, captured the way arming captures it.

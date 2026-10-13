@@ -160,6 +160,16 @@ export class Sim {
     return this.e.sim_set_angle_mode(on ? 1 : 0);
   }
 
+  /* Betaflight BANK_MODE from the banked-mode-init fork. 0 is off. See
+   * sim_abi.h. Not in the required list: a module built before it existed
+   * still loads, and this throws only if the mode is actually asked for. */
+  setBankMode(on) {
+    if (typeof this.e.sim_set_bank_mode !== 'function') {
+      throw new Error('sim.wasm does not export sim_set_bank_mode');
+    }
+    return this.e.sim_set_bank_mode(on ? 1 : 0);
+  }
+
   /* Betaflight launch control. 0 is off. See sim_abi.h. */
   setLaunchControl(on) {
     return this.e.sim_set_launch_control(on ? 1 : 0);
