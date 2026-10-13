@@ -8,11 +8,13 @@
 # hooks into 4.5.1's own files are patches/0003-bank-mode-hooks.patch.
 #
 # Usage: scripts/sync-bank-mode.sh [fork-dir] [ref]
-#   fork-dir defaults to ../betaflight, ref to banked-mode-init.
+#   fork-dir defaults to ../betaflight, ref to banked-mode-init. Pass the ref
+#   WORKTREE to read the fork's working tree instead, for changes the owner
+#   has not committed yet (still a plain read, nothing is written there).
 #
 # The two adaptations are the only differences from the fork, and each is a
 # 4.5.1 API difference, not a behaviour change:
-#   acc.accADC.x / .y   4.5.1 has accADC as float[3]       -> accADC[X] / [Y]
+#   acc.accADC.x/.y/.z  4.5.1 has accADC as float[3]       -> accADC[X] / [Y] / [Z]
 #   RP_AXIS_COUNT       not defined in 4.5.1                -> FD_YAW (== 2)
 #
 # This file is part of WebFPVSimulator.
@@ -39,10 +41,11 @@ OUT=src/native/bf/bank
 
 mkdir -p "$OUT/flight" "$OUT/pg"
 for f in flight/bank_mode.c flight/bank_mode.h pg/bank_mode.c pg/bank_mode.h; do
-  git -C "$FORK" show "$REF:src/main/$f" \
+  { if [ "$REF" = WORKTREE ]; then cat "$FORK/src/main/$f"; else git -C "$FORK" show "$REF:src/main/$f"; fi; } \
     | sed -e 's/acc\.accADC\.x/acc.accADC[X]/' \
           -e 's/acc\.accADC\.y/acc.accADC[Y]/' \
+          -e 's/acc\.accADC\.z/acc.accADC[Z]/' \
           -e 's/RP_AXIS_COUNT/FD_YAW/' \
     > "$OUT/$f"
 done
-echo "sync-bank-mode: $REF at $(git -C "$FORK" rev-parse --short "$REF") -> $OUT"
+echo "sync-bank-mode: $REF at $(git -C "$FORK" rev-parse --short HEAD) -> $OUT"

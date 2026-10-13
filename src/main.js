@@ -5239,7 +5239,7 @@ export async function boot({ loading, bootStart, mapId }) {
     }
     if (ui.setCraftCaption && !(showcase && showcase.failed)) {
       ui.setCraftCaption(wantBank
-        ? 'Bank. Roll banks, pitch is speed, throttle is lift.'
+        ? 'Bank. Roll banks, throttle is speed, pitch is lift.'
         : (want
           ? 'Angle. Sticks are tilt. Hands off levels.'
           : 'Acro. Sticks are rates. Hands off holds.'));

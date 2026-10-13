@@ -9248,7 +9248,7 @@ export class Ui {
         { label: 'Flight', section: true },
         choice(
           'Flight mode',
-          'Acro: sticks are rates, hands off holds attitude. Angle: sticks are tilt, hands off levels. A radio, a gamepad, thumb sticks and every freestyle flight fly this one, because Angle holds the craft to about thirty degrees of bank and no trick in the book can be flown in it. M in flight switches whichever one you are flying, and keeps it. Bank (experimental, from the banked-mode-init Betaflight fork): roll banks the craft into a coordinated turn, pitch sets forward speed, throttle sets lift with the centre holding one g, and yaw is a head check.',
+          'Acro: sticks are rates, hands off holds attitude. Angle: sticks are tilt, hands off levels. A radio, a gamepad, thumb sticks and every freestyle flight fly this one, because Angle holds the craft to about thirty degrees of bank and no trick in the book can be flown in it. M in flight switches whichever one you are flying, and keeps it. Bank (experimental, from the banked-mode-init Betaflight fork): roll banks the craft into a coordinated turn, throttle sets forward speed (the bottom stops, there is no reverse), pitch sets lift with the centre holding one g, and yaw is a head check.',
           FLIGHT_MODES,
           s.flightMode === 'angle' || s.flightMode === 'bank' ? s.flightMode : 'acro',
           (id) => (id === 'angle' ? 'Angle' : (id === 'bank' ? 'Bank' : 'Acro')),
