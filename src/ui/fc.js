@@ -695,6 +695,7 @@ export class FcSession {
 
     if (this.tab === 'modes') {
       const angle = this.getFlightMode() === 'angle';
+      const bank = this.getFlightMode() === 'bank';
       rows.push({
         label: 'ARM',
         value: 'Always on',
@@ -710,8 +711,18 @@ export class FcSession {
         on: angle,
         value: angle ? 'On' : 'Off',
         current: angle,
-        adjust: (d) => this.setFlightMode(d > 0),
-        flip: () => this.setFlightMode(!angle),
+        adjust: (d) => this.setFlightMode(d > 0 ? 'angle' : 'acro'),
+        flip: () => this.setFlightMode(angle ? 'acro' : 'angle'),
+      });
+      rows.push({
+        label: 'BANK',
+        note: 'On or off, same sim_set_bank_mode as Bank in Flight mode. Betaflight BANK mode from the its-wobble/betaflight fork, BOXBANK on a real board. Takes priority over ANGLE. B in flight switches it.',
+        sw: true,
+        on: bank,
+        value: bank ? 'On' : 'Off',
+        current: bank,
+        adjust: (d) => this.setFlightMode(d > 0 ? 'bank' : 'acro'),
+        flip: () => this.setFlightMode(bank ? 'acro' : 'bank'),
       });
       rows.push({
         label: 'LAUNCH CONTROL',

@@ -4968,6 +4968,11 @@ export async function boot({ loading, bootStart, mapId }) {
    * Changing this does not re-init the module and does not reset the craft.
    */
   let angleModeOn = false;
+  /* BANK mode, the owner's flight mode from the its-wobble/betaflight fork,
+   * a third value of the same choice: 'acro', 'angle' or 'bank'. B in flight
+   * toggles it, M still flips Acro and Angle. See flipBankMode. */
+  let bankModeOn = false;
+  let preBankMode = 'acro';
   /* L-switch for launch control. The Settings row only enables the
    * feature; this is the mode switch, captured at the sitting. */
   let lcArmed = false;
@@ -5047,14 +5052,21 @@ export async function boot({ loading, bootStart, mapId }) {
     return input.isKeyboardPrimary() ? 'keyRaceMode' : 'flightMode';
   }
 
-  function wantAngleMode() {
+  /* 'acro', 'angle' or 'bank'. Turtle, crash flip and a launch hold fly
+   * Acro whatever the choice says, BANK included. */
+  function wantFlightMode() {
     if (crashflipOn || turtleRecover) {
-      return false;
+      return 'acro';
     }
     if (lcAcroUntil === Infinity || (lcAcroUntil > 0 && performance.now() < lcAcroUntil)) {
-      return false;
+      return 'acro';
     }
-    return ui.settings[flightModeSetting()] === 'angle';
+    const m = ui.settings[flightModeSetting()];
+    return m === 'angle' || m === 'bank' ? m : 'acro';
+  }
+
+  function wantAngleMode() {
+    return wantFlightMode() === 'angle';
   }
 
   /*
@@ -5082,6 +5094,35 @@ export async function boot({ loading, bootStart, mapId }) {
       text: next === 'angle'
         ? 'ANGLE\nSticks are tilt. Let go and it levels.\nM switches back.'
         : 'ACRO\nSticks are rates. Let go and it holds its attitude.\nM switches back.',
+      untilMs: performance.now() + 2600,
+    };
+  }
+
+  /*
+   * B IN FLIGHT: BANK ON OR OFF. Its own key rather than a third stop on M,
+   * so a pilot who flips Acro and Angle with M never lands in a mode whose
+   * sticks mean something else. Off returns to whatever was flying before.
+   * Same stored choice as M, so it sticks the same way.
+   */
+  function flipBankMode() {
+    const key = flightModeSetting();
+    const cur = ui.settings[key];
+    let next;
+    if (cur === 'bank') {
+      next = preBankMode === 'angle' ? 'angle' : 'acro';
+    } else {
+      preBankMode = cur === 'angle' ? 'angle' : 'acro';
+      next = 'bank';
+    }
+    ui.settings[key] = next;
+    ui.persistSettings();
+    syncAngleMode();
+    notice = {
+      text: next === 'bank'
+        ? 'BANK\nThrottle is lift, centre holds height. Pitch is speed, roll banks, yaw looks.\nB switches back.'
+        : (next === 'angle'
+          ? 'ANGLE\nSticks are tilt. Let go and it levels.\nB for Bank.'
+          : 'ACRO\nSticks are rates. Let go and it holds its attitude.\nB for Bank.'),
       untilMs: performance.now() + 2600,
     };
   }
@@ -5208,16 +5249,28 @@ export async function boot({ loading, bootStart, mapId }) {
   }
 
   function syncAngleMode() {
-    const want = wantAngleMode();
-    if (want !== angleModeOn) {
-      angleModeOn = want;
-      sim.setAngleMode(want);
+    const mode = wantFlightMode();
+    const angle = mode === 'angle';
+    const bank = mode === 'bank';
+    if (angle !== angleModeOn) {
+      angleModeOn = angle;
+      sim.setAngleMode(angle);
+    }
+    if (bank !== bankModeOn) {
+      bankModeOn = bank;
+      sim.setBankMode(bank);
     }
     if (ui.setCraftCaption && !(showcase && showcase.failed)) {
-      ui.setCraftCaption(want
-        ? 'Angle. Sticks are tilt. Hands off levels.'
-        : 'Acro. Sticks are rates. Hands off holds.');
+      ui.setCraftCaption(bank
+        ? 'Bank. Throttle is lift, pitch is speed, roll banks.'
+        : (angle
+          ? 'Angle. Sticks are tilt. Hands off levels.'
+          : 'Acro. Sticks are rates. Hands off holds.'));
     }
+  }
+
+  function flyingModeName() {
+    return bankModeOn ? 'bank' : (angleModeOn ? 'angle' : 'acro');
   }
 
   /*
@@ -6555,8 +6608,8 @@ export async function boot({ loading, bootStart, mapId }) {
     }
     ui.renderMenu();
   };
-  ui.onFcAngle = (on) => {
-    ui.settings.flightMode = on ? 'angle' : 'acro';
+  ui.onFcAngle = (mode) => {
+    ui.settings.flightMode = mode === 'angle' || mode === 'bank' ? mode : 'acro';
     syncAngleMode();
   };
   ui.onFcMotor = (motor, duty) => {
@@ -7211,6 +7264,11 @@ export async function boot({ loading, bootStart, mapId }) {
     /* Angle or Acro, from the keyboard. See flipFlightMode. */
     if (code === 'KeyM' && ui.screen === 'flight' && mode === 'flight') {
       flipFlightMode();
+      return;
+    }
+    /* Bank on or off, from the keyboard. See flipBankMode. */
+    if (code === 'KeyB' && ui.screen === 'flight' && mode === 'flight') {
+      flipBankMode();
       return;
     }
     if (code === 'KeyL' && ui.screen === 'flight') {
@@ -9787,7 +9845,7 @@ export async function boot({ loading, bootStart, mapId }) {
          * See osdSpeed in configs/airframes.js. */
         speedKph: airframeById(runAirframe).osdSpeed ? speed * 3.6 : null,
         throttle: input.channels.throttle,
-        flightMode: (turtleWait || turtleFlip.active) ? 'turtle' : (angleModeOn ? 'angle' : 'acro'),
+        flightMode: (turtleWait || turtleFlip.active) ? 'turtle' : flyingModeName(),
         /* No damage model, so nothing to count down. How much this run has
          * bounced is still worth telling a pilot, and the OSD says nothing
          * at all until there is something to say. */
@@ -10858,7 +10916,7 @@ export async function boot({ loading, bootStart, mapId }) {
   };
   /* Which control mode the plant is actually in. A rig that thinks it is
    * flying acro and is not measures nothing: angle cannot loop. */
-  window.__flightMode = () => (angleModeOn ? 'angle' : 'acro');
+  window.__flightMode = () => flyingModeName();
   /*
    * The air, READ BACK OUT OF THE MODULE rather than out of the menu, which
    * is the same discipline the PIDs panel keeps: a slider that stopped
@@ -11558,7 +11616,7 @@ export async function boot({ loading, bootStart, mapId }) {
      * said "acro". Inside `stick` rather than beside it, because the board
      * caps a report at 32 top level keys.
      */
-    flying: angleModeOn ? 'angle' : 'acro',
+    flying: flyingModeName(),
     keyRaceMode: ui.settings.keyRaceMode,
     keyThrottle: input.keyThrottle,
     keyHover: Math.round(input.kbHover * 1000) / 10,

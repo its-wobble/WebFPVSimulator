@@ -534,7 +534,9 @@ function cycle(list, value, dir) {
  */
 export const SETTINGS_KEY = 'webfpv.settings.v3';
 
-export const FLIGHT_MODES = ['acro', 'angle'];
+/* 'bank' is BANK mode from the its-wobble/betaflight fork. */
+export const FLIGHT_MODES = ['acro', 'angle', 'bank'];
+const flightModeLabel = (id) => (id === 'angle' ? 'Angle' : (id === 'bank' ? 'Bank' : 'Acro'));
 /* Auto reset's wait, in seconds, from the craft going down to the run
  * restarting. One second is the preselected one. See autoResetTick in
  * src/main.js. */
@@ -1676,10 +1678,10 @@ export function loadSettings() {
       s[k] = stored[k];
     }
   }
-  if (s.flightMode !== 'angle') {
+  if (s.flightMode !== 'angle' && s.flightMode !== 'bank') {
     s.flightMode = 'acro';
   }
-  if (s.keyRaceMode !== 'acro') {
+  if (s.keyRaceMode !== 'acro' && s.keyRaceMode !== 'bank') {
     s.keyRaceMode = 'angle';
   }
   /* A blob saved before hasFlown existed belongs to somebody who has been
@@ -5016,16 +5018,16 @@ export class Ui {
      */
     this.onFcOpen = null;    /* (page) => void */
     this.onFcSave = null;    /* (draft, { restart, exit, presetId }) => void */
-    this.onFcAngle = null;   /* (on) => void, same sim_set_angle_mode as Settings */
+    this.onFcAngle = null;   /* (mode) => void, 'acro' 'angle' or 'bank', same as the Flight mode row */
     this.onFcMotor = null;   /* (motor, duty) => void, sim_motor_override */
     this.fc = new FcSession();
-    this.fc.getFlightMode = () => (this.settings.flightMode === 'angle' ? 'angle' : 'acro');
-    this.fc.setFlightMode = (on) => {
-      this.settings.flightMode = on ? 'angle' : 'acro';
+    this.fc.getFlightMode = () => (FLIGHT_MODES.includes(this.settings.flightMode) ? this.settings.flightMode : 'acro');
+    this.fc.setFlightMode = (mode) => {
+      this.settings.flightMode = FLIGHT_MODES.includes(mode) ? mode : 'acro';
       saveSettings(this.settings);
       this.renderMenu();
       if (this.onFcAngle) {
-        this.onFcAngle(Boolean(on));
+        this.onFcAngle(this.settings.flightMode);
       }
     };
     this.fc.getLaunchControl = () => Boolean(this.settings.launchControl);
@@ -9248,10 +9250,10 @@ export class Ui {
         { label: 'Flight', section: true },
         choice(
           'Flight mode',
-          'Acro: sticks are rates, hands off holds attitude. Angle: sticks are tilt, hands off levels. A radio, a gamepad, thumb sticks and every freestyle flight fly this one, because Angle holds the craft to about thirty degrees of bank and no trick in the book can be flown in it. M in flight switches whichever one you are flying, and keeps it.',
+          'Acro: sticks are rates, hands off holds attitude. Angle: sticks are tilt, hands off levels. Bank: throttle is lift with centre holding height, pitch is speed, roll banks into a turn and yaw looks around. A radio, a gamepad, thumb sticks and every freestyle flight fly this one, because Angle holds the craft to about thirty degrees of bank and no trick in the book can be flown in it. M in flight switches Acro and Angle, B switches Bank, and both keep it.',
           FLIGHT_MODES,
-          s.flightMode === 'angle' ? 'angle' : 'acro',
-          (id) => (id === 'angle' ? 'Angle' : 'Acro'),
+          FLIGHT_MODES.includes(s.flightMode) ? s.flightMode : 'acro',
+          flightModeLabel,
           (id) => { s.flightMode = id; },
         ),
         /*
@@ -9266,8 +9268,8 @@ export class Ui {
           'Keyboard races',
           'How a race flies on the keyboard. Angle by default: a key is on or off, so letting go levelling the quad is what makes keys flyable. Acro if you have learned to fly keys on rates. M in flight switches it too, and keeps it.',
           FLIGHT_MODES,
-          s.keyRaceMode === 'acro' ? 'acro' : 'angle',
-          (id) => (id === 'angle' ? 'Angle' : 'Acro'),
+          FLIGHT_MODES.includes(s.keyRaceMode) ? s.keyRaceMode : 'angle',
+          flightModeLabel,
           (id) => { s.keyRaceMode = id; },
         )] : []),
         toggle(
@@ -15122,7 +15124,7 @@ export class Ui {
         ? 'Turtle'
         : (launchState === 1 || launchState === 2
           ? 'Launch'
-          : (flightMode === 'angle' ? 'Angle' : 'Acro'));
+          : flightModeLabel(flightMode));
       Ui.text(this.osdFlight, modeText);
       Ui.text(this.osdFlightTouch, modeText);
     }
