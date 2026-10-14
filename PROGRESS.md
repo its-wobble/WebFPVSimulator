@@ -70600,3 +70600,10 @@ Latency: a static asset with no per-frame work, plus 58 KB of bytes at load for 
 - Proven able to see the feature: flipping the ball loop sign in `bank_mode.c` turned 7 rows red (ball -0.20 g, track change 167 deg in the head check). Restored.
 - Not run: `npm run verify` (no change reaches the default build); `lint:shell`, `lint:input`, `shots.js` (headless Chromium in the devcontainer cannot create a WebGL context, and it fails identically without these changes). Nobody has flown Bank.
 - Known limits: true attitude instead of imu.c's estimate (optimistic under sustained drag), no accelerometer vibration or residual bias, no aux channels (sim_set_bank_mode / B key).
+
+## 2026-10-14 | devcontainer | Browser checks run in the devcontainer
+
+- Cause of "no WebGL": Debian's Chromium builds ANGLE's Vulkan display for X11 only (`DisplayVkXcb ... xcb_connect() failed`), so even `--headless=new` with SwiftShader needs an X server. `--ozone-platform=headless` and pointing `VK_ICD_FILENAMES` at the SwiftShader ICD did not help. Under Xvfb: WebGL 2.0, ANGLE on Vulkan, SwiftShader driver.
+- Fix (in the Betaflight repo's .devcontainer): `xvfb` and `xauth` in the containerfile, `DISPLAY=:99` in containerEnv, `start-xvfb.sh` as postStartCommand. Verified in the running container by hand; not yet verified through a rebuild.
+- With the display up, the shell boots on `?fw=bank` and `__bankSwitch(true)` engages Bank (`__flightMode()` reads `bank`).
+- `lint:shell`: 5 failures (quad and pilot overflow, howto list under the command bar at three sizes). `lint:input`: 3 failed, 243 passed (6S pack reading, keyboard climb when X goes, a key at the track builder question). Identical with the bank shell changes stashed, so existing and not caused by them. Not investigated.

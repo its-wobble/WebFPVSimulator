@@ -59,7 +59,8 @@ After a firmware edit, run `npm run build:wasm:bank` again and reload the page.
 - **Bank switches itself off.** Turtle, crash flip and a launch control hold override it, the same way they override Angle.
 - **`bank:sync` reports DRIFT.** A bank hook changed on the Betaflight branch. Port it into `patches/bank/` as `.claude/skills/bank-sim-check/SKILL.md` describes, then run `bash scripts/bank-sync.sh --accept`.
 - **The bank build fails to compile.** `bank_mode.c` uses an API that 4.5.1 lacks. Add a mapping to `patches/bank/compat.sed` or a define in `scripts/build-wasm.sh`.
-- **The browser checks fail** (`lint:shell`, `lint:input`, `shots.js`). Headless Chromium in the devcontainer has no WebGL, so these cannot run there. Neither the bank loop nor flying in your own browser depends on them.
+- **The browser checks time out waiting for `__shellReady`** (`lint:shell`, `lint:input`, `shots.js`). Debian's Chromium needs an X display to get WebGL, even headless. The devcontainer starts one (Xvfb on `:99`, `DISPLAY` set by `containerEnv`). Check with `pgrep -a Xvfb`; if it is not running, `bash /workspaces/betaflight/.devcontainer/start-xvfb.sh`, or run a single check as `xvfb-run -a npm run lint:shell`.
+- **`lint:shell` and `lint:input` report failures.** As of 2026-10-14 they fail the same way with or without the bank changes (5 layout overflows in `lint:shell`; the 6S pack, X key climb and track builder question rows in `lint:input`). Those are existing, not bank related. Compare against that list before blaming a bank change.
 
 ## What a result does and does not tell you
 

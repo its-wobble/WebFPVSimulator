@@ -45,7 +45,7 @@ When `bank:sync` reports DRIFT: read `git -C $BF_BANK_SRC diff master -- src/mai
 - Attitude is the plant's true attitude, not `imu.c`'s estimate. On hardware sustained drag biases the estimate, so results here are optimistic about attitude.
 - No accelerometer vibration or residual bias yet (white noise and quantisation only).
 - No aux channels: bank is switched by `sim_set_bank_mode` (shell: `?fw=bank`, then B in flight).
-- Headless Chromium has no WebGL in the devcontainer, so `lint:shell`, `lint:input` and `shots.js` cannot run there. The bank loop does not need them.
+- Browser checks (`lint:shell`, `lint:input`, `shots.js`) need the devcontainer's Xvfb display (`DISPLAY=:99`); see BANK-MODE.md if they time out on `__shellReady`. They had 8 existing failures on 2026-10-14 unrelated to bank (listed in BANK-MODE.md). The bank loop itself does not need a browser.
 
 ## Reporting
 
