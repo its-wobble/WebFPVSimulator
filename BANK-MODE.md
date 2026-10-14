@@ -36,7 +36,7 @@ npm run build:wasm:bank     # not needed if bank:cycle just ran
 npm run serve
 ```
 
-1. Open **http://localhost:8000/?fw=bank** in your own browser (VS Code forwards port 8000). Without `?fw=bank` the page loads the normal `sim.wasm`, which has no Bank mode.
+1. Open **http://localhost:8000/** in your own browser (VS Code forwards port 8000). Once `dist/sim-bank.wasm` exists, `npm run serve` redirects a plain visit to `?fw=bank`, so the bank firmware loads by default. For the stock firmware open `/?fw=normal`, or start the server with `SIM_FW=normal npm run serve`.
 2. Start a flight.
 3. Press **B** to turn Bank on. A banner explains the sticks and the on-screen mode indicator reads **Bank**. Press **B** again to go back to Acro or Angle.
 
@@ -55,7 +55,7 @@ After a firmware edit, run `npm run build:wasm:bank` again and reload the page.
 
 ## If something is wrong
 
-- **B does nothing.** In the browser devtools console, `__bankSwitch(true)` returns `true` when Bank engaged and `false` when the page loaded the normal firmware. Check the `?fw=bank` URL and that `dist/sim-bank.wasm` exists. The file is gitignored, so a fresh clone has to build it. `__flightMode()` reports the live mode.
+- **B does nothing.** In the browser devtools console, `__bankSwitch(true)` returns `true` when Bank engaged and `false` when the page loaded the normal firmware. Check the URL ends in `?fw=bank` (the server adds it only when `dist/sim-bank.wasm` exists and `SIM_FW` is not `normal`). The file is gitignored, so a fresh clone has to build it. `__flightMode()` reports the live mode.
 - **Bank switches itself off.** Turtle, crash flip and a launch control hold override it, the same way they override Angle.
 - **`bank:sync` reports DRIFT.** A bank hook changed on the Betaflight branch. Port it into `patches/bank/` as `.claude/skills/bank-sim-check/SKILL.md` describes, then run `bash scripts/bank-sync.sh --accept`.
 - **The bank build fails to compile.** `bank_mode.c` uses an API that 4.5.1 lacks. Add a mapping to `patches/bank/compat.sed` or a define in `scripts/build-wasm.sh`.

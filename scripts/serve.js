@@ -159,10 +159,29 @@ function sendFile(req, res, path, rel) {
   });
 }
 
+/*
+ * Bank firmware by default, for the dev server only. Once a bank build
+ * exists (npm run build:wasm:bank), a visit to the shell with no ?fw= is
+ * redirected to ?fw=bank, so B works without remembering the URL. Any ?fw=
+ * value (?fw=normal, say) opts out, and SIM_FW=normal turns this off. The
+ * checks use tests/lib/server.js and the deploy never has the file, so
+ * neither is affected.
+ */
+const BANK_WASM = join(root, 'dist', 'sim-bank.wasm');
+const bankDefault = () =>
+  process.env.SIM_FW !== 'normal' && stat(BANK_WASM).then((info) => info.isFile(), () => false);
+
 http
   .createServer(async (req, res) => {
     try {
       const url = new URL(req.url, 'http://localhost');
+      if ((url.pathname === '/' || url.pathname === '/index.html') && !url.searchParams.has('fw')
+          && await bankDefault()) {
+        url.searchParams.set('fw', 'bank');
+        res.writeHead(302, { location: url.pathname + url.search, 'cache-control': 'no-store' });
+        res.end();
+        return;
+      }
       let rel = normalize(decodeURIComponent(url.pathname)).replace(/^([/\\])+/, '');
       if (rel === '') {
         rel = 'index.html';
@@ -182,4 +201,9 @@ http
   .listen(port, '127.0.0.1', () => {
     console.log(`WebFPVSimulator: http://127.0.0.1:${port}/`);
     console.log('Build the module first if you have not: npm run build:wasm');
+    Promise.resolve(bankDefault()).then((on) => {
+      if (on) {
+        console.log('Bank firmware by default (dist/sim-bank.wasm). ?fw=normal or SIM_FW=normal for the stock module.');
+      }
+    });
   });
