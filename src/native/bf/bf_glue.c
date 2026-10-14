@@ -93,6 +93,15 @@ extern double PLANT_DBG_VPERP;
 extern double PLANT_DBG_PITCH_UP;
 #include "bf_settings.h"
 
+#ifdef SIM_BANK_MODE
+#include "pg/bank_mode.h"
+/* bf_bank.c */
+void bf_bank_init(void);
+bool bf_bank_mode_flags(void);
+void bf_bank_acc_task(timeUs_t now_us);
+void bf_bank_rx_frame(timeUs_t now_us);
+#endif
+
 /* Externs Betaflight expects from files we do not compile. gyro itself is
  * no longer here: sensors/gyro.c defines it now, and defines it because
  * this build compiles the real filter chain rather than writing filtered
@@ -425,6 +434,12 @@ void bf_config_begin(void) {
   *dynNotchConfigMutable() = pgResetTemplate_dynNotchConfig;
   *rpmFilterConfigMutable() = pgResetTemplate_rpmFilterConfig;
   *pidConfigMutable() = pgResetTemplate_pidConfig;
+#ifdef SIM_BANK_MODE
+  {
+    extern const bankModeConfig_t pgResetTemplate_bankModeConfig;
+    *bankModeConfigMutable() = pgResetTemplate_bankModeConfig;
+  }
+#endif
   resetPidProfile(pidProfilesMutable(0));
 
   currentPidProfile = pidProfilesMutable(0);
@@ -574,6 +589,9 @@ static void bf_runtime_init(void) {
    * are empty and it reduces to the airmode line.
    */
   featureInit();
+#ifdef SIM_BANK_MODE
+  bf_bank_init();
+#endif
   updateActivatedModes();
   pidSetAntiGravityState(featureIsEnabled(FEATURE_ANTI_GRAVITY));
 
@@ -997,6 +1015,14 @@ void bridge_run(const SimState *s, const double rc[4], int rx_new,
     bf_apply_angle_mode_flag();
     bf_feed_attitude(s);
   }
+#ifdef SIM_BANK_MODE
+  /* After angle: BANK overrides ANGLE, as in core.c. The accelerometer
+   * samples every step whatever the mode, as TASK_ACCEL does. */
+  if (bf_bank_mode_flags()) {
+    bf_feed_attitude(s);
+  }
+  bf_bank_acc_task(now_us);
+#endif
 
   /* Faithful flight controller wiring, in fc/core.c's own order:
    * gyro sample, gyro filter, rc command, PID, mixer.
@@ -1015,6 +1041,9 @@ void bridge_run(const SimState *s, const double rc[4], int rx_new,
   gyroFiltering(now_us);
 
   if (rx_new) {
+#ifdef SIM_BANK_MODE
+    bf_bank_rx_frame(now_us);
+#endif
     updateRcRefreshRate(now_us);
     updateRcCommands();
   }

@@ -1435,6 +1435,46 @@ SIM_EXPORT int sim_motor_override(int motor, double duty) {
   return SIM_OK;
 }
 
+#ifdef SIM_BANK_MODE
+/*
+ * ACCELEROMETER TRUTH, bank build only. What a MEMS accelerometer measures is
+ * specific force: every force on the craft except gravity, per unit mass, in
+ * the body frame. Taken here from the velocity change over the WHOLE step,
+ * after contact, the stand and the world have had their say, so a craft
+ * sitting on the ground reads +1 g up and a crash reads its impulse, exactly
+ * as a real part does. The room is in scene metres (len_scale) and gravity is
+ * the pilot's knob, both undone here so the reading is in the real machine's
+ * m/s^2. One step old when bf_bank.c samples it, as a real sample is.
+ */
+double SIM_ACC_BODY[3];
+
+static void sim_measure_specific_force(const double v_before[3]) {
+  const double inv = 1.0 / (SIM_DT * PLANT.len_scale);
+  const double g_scene = PLANT_W.gravity * SIM_GRAVITY;
+  const double f_world[3] = {
+    (S.vel[0] - v_before[0]) * inv,
+    (S.vel[1] - v_before[1]) * inv,
+    ((S.vel[2] - v_before[2]) / SIM_DT + g_scene) / PLANT.len_scale,
+  };
+  contact_rotate_inv(f_world, SIM_ACC_BODY);
+}
+
+SIM_EXPORT int sim_set_bank_mode(int on) {
+  bf_bank_set_switch(on);
+  return SIM_OK;
+}
+
+/* Bank mode telemetry, see bf_bank_telemetry for the layout. Returns the
+ * count written, or SIM_ERR_BAD_ARG if out is null or too short. */
+SIM_EXPORT int sim_bank_telemetry(double *out, int n) {
+  if (out == 0) {
+    return SIM_ERR_BAD_ARG;
+  }
+  const int got = bf_bank_telemetry(out, n);
+  return got < 0 ? SIM_ERR_BAD_ARG : got;
+}
+#endif
+
 SIM_EXPORT int sim_step(int n) {
   if (!g_initialised) {
     return SIM_ERR_BAD_STATE;
@@ -1457,6 +1497,9 @@ SIM_EXPORT int sim_step(int n) {
     }
     double duty[SIM_MOTOR_COUNT];
     bridge_run(&S, g_current_rc, rx_new, duty);
+#ifdef SIM_BANK_MODE
+    const double v_before[3] = { S.vel[0], S.vel[1], S.vel[2] };
+#endif
     for (int m = 0; m < SIM_MOTOR_COUNT; m += 1) {
       if (g_override[m] >= 0.0) {
         duty[m] = g_override[m];
@@ -1493,6 +1536,9 @@ SIM_EXPORT int sim_step(int n) {
       world_step(&S, g_ground_on, g_ground_n, g_ground_d);
     }
     stand_apply();
+#ifdef SIM_BANK_MODE
+    sim_measure_specific_force(v_before);
+#endif
     /* The road vehicles' clock, here and not in world_step, because the
      * stand skips world_step and the traffic does not wait for a launch. */
     world_tick();

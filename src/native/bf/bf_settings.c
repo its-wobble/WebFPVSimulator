@@ -58,6 +58,10 @@
 #include "flight/mixer_init.h"
 #include "flight/pid.h"
 #include "flight/pid_init.h"
+#ifdef SIM_BANK_MODE
+#include "flight/bank_mode.h"
+#include "pg/bank_mode.h"
+#endif
 #include "pg/dyn_notch.h"
 #include "pg/motor.h"
 #include "pg/rpm_filter.h"
@@ -222,6 +226,27 @@ void bf_settings_build(void) {
   U8("launch_trigger_throttle_percent", p->launchControlThrottlePercent);
   U8("launch_angle_limit", p->launchControlAngleLimit);
   U8("launch_control_gain", p->launchControlGain);
+
+#ifdef SIM_BANK_MODE
+  /* ---- Bank mode, BANK=1 builds only. The same names and fields as the
+   * feature branch's cli/settings.c; a field renamed there is a compile
+   * error here, which is the cue to follow it. ---- */
+  {
+    bankModeConfig_t *b = bankModeConfigMutable();
+    U16("bank_thrust_to_weight", b->thrustToWeight);
+    U8("bank_max_bank_angle", b->maxBankAngle);
+    U8("bank_max_tilt_angle", b->maxTiltAngle);
+    U8("bank_stick_deadband", b->stickDeadband);
+    U8("bank_head_check_range", b->headCheckRange);
+    U16("bank_head_check_rate", b->headCheckRate);
+    U16("bank_ball_kp", b->ballKp);
+    U16("bank_ball_ki", b->ballKi);
+    U16("bank_ball_deadband", b->ballDeadband);
+    U16("bank_yaw_max_rate", b->yawMaxRate);
+    U16("bank_speed_kp", b->speedKp);
+    U16("bank_speed_deadband", b->speedDeadband);
+  }
+#endif
 
   /* ---- Anti gravity ---- */
   U8(PARAM_NAME_ANTI_GRAVITY_GAIN, p->anti_gravity_gain);

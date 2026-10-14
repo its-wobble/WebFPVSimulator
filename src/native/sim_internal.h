@@ -427,6 +427,11 @@ void bridge_run(const SimState *s, const double rc[4], int rx_new,
  * does not read this.
  */
 void bridge_set_angle_mode(int on);
+#ifdef SIM_BANK_MODE
+/* bf/bf_bank.c, bank build only. */
+void bf_bank_set_switch(int on);
+int bf_bank_telemetry(double *out, int n);
+#endif
 
 /*
  * Betaflight BOXLAUNCHCONTROL, captured the way arming captures it.

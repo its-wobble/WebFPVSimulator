@@ -5,6 +5,8 @@ description: Verify any change to the FPV simulator's physics, control loop, WAS
 
 # Verifying a flight model change
 
+The bank firmware build (`BANK=1`, `dist/sim-bank.wasm`) has its own loop in the `bank-sim-check` skill. A change confined to `#ifdef SIM_BANK_MODE` code, `patches/bank/` or the bank scripts needs that loop plus proof that `dist/sim.wasm` is byte identical after `npm run build:wasm`. Anything that can reach the default build still needs the full procedure below.
+
 A successful edit is not evidence of anything. A successful build is not evidence of anything. This project has one honest signal, which is the harness. Use it.
 
 ## The procedure

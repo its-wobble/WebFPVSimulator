@@ -1,0 +1,18 @@
+{
+  "_comment": "Bands for scripts/bank-check.js. Each is derived from the bank mode spec (project_plan.md in the Betaflight repo), not from a measured run. Same rule as tests/thresholds.json: never widen a band to make a check pass; argue it in PROGRESS.md and let the owner decide. A key with no band here is printed as info.",
+  "hover_vertical_accel":        { "min": -0.3,  "max": 0.3,  "why": "pitch stick centre is 1 g of lift: zero vertical acceleration (not zero vertical speed, that needs baro)" },
+  "hover_tilt_deg":              { "min": 0,     "max": 2,    "why": "speed stick at the bottom: no tilt" },
+  "hover_horizontal_speed":      { "min": 0,     "max": 0.3,  "why": "speed stick at the bottom commands zero speed" },
+  "cruise_speed_variation":      { "min": 0,     "max": 0.5,  "why": "a fixed speed stick holds a steady speed once settled" },
+  "cruise_vertical_accel":       { "min": -0.3,  "max": 0.3,  "why": "tilting forward raises collective by 1/cos so vertical force is unchanged" },
+  "turn_roll_tracking_deg":      { "min": 0,     "max": 3,    "why": "the craft holds the bank angle the mode commands" },
+  "turn_ball_g":                 { "min": -0.05, "max": 0.05, "why": "the ball loop nulls lateral specific force in a steady turn" },
+  "turn_coordination_dps":       { "min": 0,     "max": 3,    "why": "coordinated turn: the nose turns at the rate the track turns" },
+  "turn_vertical_accel":         { "min": -0.3,  "max": 0.3,  "why": "bank applies the same 1/cos tilt compensation" },
+  "headcheck_nose_offset_deg":   { "min": -100,  "max": -80,  "why": "full right roll stick yaws the nose head_check_range (90 deg) clockwise of the track" },
+  "headcheck_track_change_deg":  { "min": -10,   "max": 10,   "why": "head check must not change the direction of travel" },
+  "headreturn_nose_offset_deg":  { "min": -5,    "max": 5,    "why": "head check springs back to neutral when the stick centres" },
+  "brake_final_speed":           { "min": 0,     "max": 0.5,  "why": "speed stick to the bottom brakes to a stop" },
+  "mode_off_cleared":            { "min": 0,     "max": 0,    "why": "switching bank off clears the mode" },
+  "determinism_same_hash":       { "min": 1,     "max": 1,    "why": "same inputs give a bit identical trace" }
+}

@@ -46,7 +46,7 @@ if ! command -v emcc >/dev/null 2>&1; then
   exit 1
 fi
 
-mkdir -p dist build/obj
+mkdir -p dist build/obj build/obj-bank
 
 # Patches in patches/ are applied with git apply against the vendor tree at
 # build time and reverted after object compilation, so the tree stays clean.
@@ -68,6 +68,30 @@ apply_vendor_patches() {
   done
 }
 PATCHES=$(ls patches/*.patch 2>/dev/null || true)
+# BANK=1 builds dist/sim-bank.wasm: the same module plus the bank flight mode
+# developed in a newer Betaflight checkout. Opt in only, so the default build
+# and dist/sim.wasm cannot change. scripts/bank-sync.sh stages the overlay
+# files in build/bank and proves patches/bank still applies to the pin.
+BANK="${BANK:-0}"
+OUT_WASM=dist/sim.wasm
+BANK_INC=""
+BANK_DEF=""
+BANK_SRC=""
+if [ "$BANK" = "1" ]; then
+  bash scripts/bank-sync.sh
+  PATCHES="$PATCHES $(ls patches/bank/*.patch)"
+  OUT_WASM=dist/sim-bank.wasm
+  BANK_INC="-I build/bank/src/main"
+  # RP_AXIS_COUNT is in common/axis.h on master, not in 4.5.1.
+  BANK_DEF="-DSIM_BANK_MODE -DUSE_BANK_MODE -DRP_AXIS_COUNT=2"
+  BANK_SRC="build/bank/src/main/flight/bank_mode.c build/bank/src/main/pg/bank_mode.c
+    vendor/betaflight/src/main/sensors/acceleration.c src/native/bf/bf_bank.c"
+  # Objects are kept apart from the default build's so neither build can
+  # link a stale object from the other.
+  OBJ_DIR=build/obj-bank
+else
+  OBJ_DIR=build/obj
+fi
 if [ -n "$PATCHES" ]; then
   apply_vendor_patches
   trap 'apply_vendor_patches -R || true' EXIT
@@ -118,17 +142,17 @@ BF_SRC="
 
 OBJS=""
 for src in $SIM_SRC; do
-  obj="build/obj/$(basename "$src" .c).o"
-  emcc -c "$src" -I src/native $CFLAGS_COMMON -Wall -o "$obj"
+  obj="$OBJ_DIR/$(basename "$src" .c).o"
+  emcc -c "$src" -I src/native $BANK_DEF $CFLAGS_COMMON -Wall -o "$obj"
   OBJS="$OBJS $obj"
 done
 # Object names carry the parent directory. Betaflight has more than one file
 # with the same basename (flight/rpm_filter.c and pg/rpm_filter.c), and a
 # basename-only rule silently overwrites one with the other, which the linker
 # then reports as a pile of duplicate symbols from a single object.
-for src in $BF_SRC; do
-  obj="build/obj/bf_$(basename "$(dirname "$src")")_$(basename "$src" .c).o"
-  emcc -c "$src" -I src/native $BF_INC $CFLAGS_COMMON -o "$obj"
+for src in $BF_SRC $BANK_SRC; do
+  obj="$OBJ_DIR/bf_$(basename "$(dirname "$src")")_$(basename "$src" .c).o"
+  emcc -c "$src" -I src/native $BANK_INC $BF_INC $BANK_DEF $CFLAGS_COMMON -o "$obj"
   OBJS="$OBJS $obj"
 done
 
@@ -137,6 +161,6 @@ emcc $OBJS \
   -sSTANDALONE_WASM=1 \
   -sEXPORTED_FUNCTIONS=_malloc,_free \
   -sALLOW_MEMORY_GROWTH=1 \
-  -o dist/sim.wasm
+  -o "$OUT_WASM"
 
-echo "build:wasm: wrote dist/sim.wasm"
+echo "build:wasm: wrote $OUT_WASM"

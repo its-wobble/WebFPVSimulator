@@ -24,6 +24,10 @@ A browser FPV racing simulator whose only current goal is flight feel indistingu
 
 **Determinism is a requirement, not a nice-to-have.** No `relaxed_simd`. No JS `Math.sin`, `Math.cos` or `Math.pow` anywhere in the physics path, because they are not specified to bit precision and vary between engines. Compile a fixed libm into the WASM module and use it. The same input stream must produce a bit-identical state trace in Node and in the browser, on any machine.
 
+## Bank overlay (BANK=1)
+
+The bank flight mode is developed in a newer Betaflight checkout (`BF_BANK_SRC`, default `/workspaces/betaflight`) and flown here without porting the vendor tree forward. `npm run bank:cycle` syncs it (`scripts/bank-sync.sh`), builds `dist/sim-bank.wasm` with `patches/bank/` on top of the usual patches, and flies `scripts/bank-check.js` against `tests/bank-thresholds.json`. Everything is behind `BANK=1` / `SIM_BANK_MODE`, so the default build and `dist/sim.wasm` are byte identical with or without it. `dist/sim-bank.wasm` is not committed and never deployed. The rules, including "the firmware only sees what hardware can measure", are in `.claude/skills/bank-sim-check/SKILL.md`. How to run and fly it: `BANK-MODE.md`. Approved by the owner on 2026-10-14, see PROGRESS.md.
+
 ## Style
 
 - Plain JavaScript for the shell. No framework, no bundler beyond what Emscripten needs, no TypeScript, no state library. If a dependency is being added, justify it in PROGRESS.md first.

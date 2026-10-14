@@ -1,0 +1,52 @@
+---
+name: bank-sim-check
+description: Build and fly the bank flight mode (developed in the Betaflight repo) in this simulator. Use whenever bank mode code changes in /workspaces/betaflight (flight/bank_mode*, pg/bank_mode*, any BANK_MODE hook), when scripts/bank-*.sh, patches/bank/, src/native/bf/bf_bank.c or tests/bank-thresholds.json change, or when asked to test, check or fly bank mode in the sim.
+---
+
+# Bank mode in the simulator
+
+The owner's how-to (build, headless check, flying it in the browser, troubleshooting) is `BANK-MODE.md` at the repo root. Point the owner there and keep it current when commands, keys or URLs change.
+
+The sim compiles a pinned Betaflight 4.5.1 (`vendor/betaflight`). The bank mode lives on a branch of current master in `$BF_BANK_SRC` (default `/workspaces/betaflight`). We do not port the sim forward. We overlay the feature onto 4.5.1:
+
+| Piece | Where | Maintained by |
+|---|---|---|
+| `flight/bank_mode.[ch]`, `pg/bank_mode.[ch]` | copied from the BF working tree into `build/bank/` by `scripts/bank-sync.sh` | nobody, automatic (uncommitted edits included) |
+| master vs 4.5.1 API differences inside those files | `patches/bank/compat.sed` (sed over the staged copy), `-DRP_AXIS_COUNT=2` in `build-wasm.sh` | you, when the build breaks on a missing API |
+| hooks into rc.c, pid.c, mixer.c, rc_modes.h, runtime_config.h, pg_ids.h | `patches/bank/0001-bank-mode-hooks.patch`, hand ported to 4.5.1 | you, when `bank:sync` reports DRIFT |
+| core.c's part (BOXBANK switch, `bankModeUpdate()` per RC frame) | `src/native/bf/bf_bank.c` (core.c is not compiled here) | you, when the branch changes how core.c drives the mode |
+| `bank_*` CLI settings | `src/native/bf/bf_settings.c` under `SIM_BANK_MODE` | you, when `bankModeConfig_t` fields change (compile error tells you) |
+| accelerometer | `sim.c` measures specific force; `bf_bank.c` turns it into ICM-42688 counts for BF's own `acceleration.c` | rarely |
+
+Everything is behind `BANK=1` / `SIM_BANK_MODE`. The default build and `dist/sim.wasm` must stay byte identical.
+
+## One iteration
+
+```bash
+cd /workspaces/betaflight && make test_bank_unittest      # firmware unit tests first
+cd /home/devpod/WebFPVSimulator && npm run bank:cycle      # sync, build sim-bank.wasm, vendor clean check, fly
+```
+
+`bank:cycle` exits non-zero on the first problem and says what it was. `npm run check:bank -- --explore` prints the time series of the sortie, which is how to see *why* a row failed. The report is in `build/bank/report.json`.
+
+When `bank:sync` reports DRIFT: read `git -C $BF_BANK_SRC diff master -- src/main/<file>`, port the change into the 4.5.1 patch (edit the vendor file, `git -C vendor/betaflight diff > patches/bank/0001-bank-mode-hooks.patch`, `git -C vendor/betaflight checkout -- .`), then `bash scripts/bank-sync.sh --accept`. Never accept without porting.
+
+## Hard rules
+
+1. **The firmware only sees what hardware gives it**: gyro, accelerometer, attitude, RC, arm state. Never feed `bank_mode.c` plant velocity, true drag, true thrust or anything else a flight controller cannot measure. A sim change that helps the mode must be one a real quad also has. The checker (`bank-check.js`) may read plant truth: it is the stopwatch, not the pilot.
+2. `vendor/betaflight` is clean after every build (`git diff --stat vendor/betaflight` empty).
+3. Never edit `tests/bank-thresholds.json` (or `tests/thresholds.json`) to make a row pass. The bands come from the spec in the Betaflight repo's `project_plan.md`. If a band is wrong, argue it in PROGRESS.md with the measured value and let the owner decide.
+4. Fix failures in the firmware (the Betaflight repo), not by changing the sim, unless the sim is demonstrably unrealistic. Then say so and ask the owner first.
+5. After touching `sim.c`, `plant.c` or anything outside `#ifdef SIM_BANK_MODE`, run `npm run build:wasm` and confirm `sha256sum dist/sim.wasm` is unchanged, then follow the `verify-flight-model` skill.
+6. A new scenario goes in `scripts/bank-check.js` with a band derived from the spec, and must be shown to fail when the behaviour it checks is broken (temporarily break `bank_mode.c`, watch it go red, restore).
+
+## Known limits (state them in every report)
+
+- Attitude is the plant's true attitude, not `imu.c`'s estimate. On hardware sustained drag biases the estimate, so results here are optimistic about attitude.
+- No accelerometer vibration or residual bias yet (white noise and quantisation only).
+- No aux channels: bank is switched by `sim_set_bank_mode` (shell: `?fw=bank`, then B in flight).
+- Headless Chromium has no WebGL in the devcontainer, so `lint:shell`, `lint:input` and `shots.js` cannot run there. The bank loop does not need them.
+
+## Reporting
+
+List each banded row as pass or fail with its measured value, any drift handled, and the known limits. Close with "harness result as above, feel awaiting the owner's flight" (`npm run serve`, open `/?fw=bank`, press B). Never claim feel is verified.

@@ -15122,7 +15122,7 @@ export class Ui {
         ? 'Turtle'
         : (launchState === 1 || launchState === 2
           ? 'Launch'
-          : (flightMode === 'angle' ? 'Angle' : 'Acro'));
+          : (flightMode === 'bank' ? 'Bank' : (flightMode === 'angle' ? 'Angle' : 'Acro')));
       Ui.text(this.osdFlight, modeText);
       Ui.text(this.osdFlightTouch, modeText);
     }

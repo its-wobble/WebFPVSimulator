@@ -145,7 +145,14 @@ import { loadSim, simErrorName, SIM_OK, SIM_ERR_BAD_ARG } from '../tests/lib/sim
  * changed, only where the page looks for it, and at the root it still
  * resolves to exactly /dist/sim.wasm.
  */
-const WASM_URL = new URL('../dist/sim.wasm', import.meta.url).href;
+/*
+ * ?fw=bank loads the bank firmware build (npm run build:wasm:bank), the same
+ * module plus the bank flight mode from the Betaflight feature branch. A dev
+ * build only: dist/sim-bank.wasm is not committed, so the deployed site never
+ * has it and this URL there is a 404, which the boot path already reports.
+ */
+const BANK_FIRMWARE = new URLSearchParams(globalThis.location?.search ?? '').get('fw') === 'bank';
+const WASM_URL = new URL(BANK_FIRMWARE ? '../dist/sim-bank.wasm' : '../dist/sim.wasm', import.meta.url).href;
 
 /*
  * Metres between sim z = 0 and the ground plane, which is where the craft
@@ -4968,6 +4975,13 @@ export async function boot({ loading, bootStart, mapId }) {
    * Changing this does not re-init the module and does not reset the craft.
    */
   let angleModeOn = false;
+  /* BANK, the flight mode under development in the Betaflight repo. Only on
+   * the bank firmware (?fw=bank). B is the aux switch; it is not saved, so
+   * the persisted Flight mode row and every normal build are untouched. The
+   * firmware gives BANK priority over ANGLE, as on a real quad. */
+  let bankSwitch = false;
+  let bankModeOn = false;
+  const bankAvailable = () => typeof sim.e.sim_set_bank_mode === 'function';
   /* L-switch for launch control. The Settings row only enables the
    * feature; this is the mode switch, captured at the sitting. */
   let lcArmed = false;
@@ -5213,7 +5227,17 @@ export async function boot({ loading, bootStart, mapId }) {
       angleModeOn = want;
       sim.setAngleMode(want);
     }
-    if (ui.setCraftCaption && !(showcase && showcase.failed)) {
+    /* Turtle, crash flip and a launch hold override bank the way they
+     * override angle. */
+    const wantBank = bankSwitch && bankAvailable() && !crashflipOn && !turtleRecover
+      && !(lcAcroUntil === Infinity || (lcAcroUntil > 0 && performance.now() < lcAcroUntil));
+    if (wantBank !== bankModeOn) {
+      bankModeOn = wantBank;
+      sim.e.sim_set_bank_mode(wantBank ? 1 : 0);
+    }
+    if (ui.setCraftCaption && !(showcase && showcase.failed) && bankModeOn) {
+      ui.setCraftCaption('Bank. Throttle is speed, yaw stick banks, pitch is lift.');
+    } else if (ui.setCraftCaption && !(showcase && showcase.failed)) {
       ui.setCraftCaption(want
         ? 'Angle. Sticks are tilt. Hands off levels.'
         : 'Acro. Sticks are rates. Hands off holds.');
@@ -7206,6 +7230,18 @@ export async function boot({ loading, bootStart, mapId }) {
       setCrashflip(false);
       turtleRecover = false;
       setDownNearby('x');
+      return;
+    }
+    /* Bank on or off, the aux switch, bank firmware only. */
+    if (code === 'KeyB' && ui.screen === 'flight' && mode === 'flight' && bankAvailable()) {
+      bankSwitch = !bankSwitch;
+      syncAngleMode();
+      notice = {
+        text: bankSwitch
+          ? 'BANK\nThrottle: speed, bottom stops. Yaw stick: bank and turn.\nPitch: lift, centre holds 1 g. Roll: look around.\nB switches back.'
+          : `${angleModeOn ? 'ANGLE' : 'ACRO'}\nBank off.\nB switches back.`,
+        untilMs: performance.now() + 3600,
+      };
       return;
     }
     /* Angle or Acro, from the keyboard. See flipFlightMode. */
@@ -9787,7 +9823,7 @@ export async function boot({ loading, bootStart, mapId }) {
          * See osdSpeed in configs/airframes.js. */
         speedKph: airframeById(runAirframe).osdSpeed ? speed * 3.6 : null,
         throttle: input.channels.throttle,
-        flightMode: (turtleWait || turtleFlip.active) ? 'turtle' : (angleModeOn ? 'angle' : 'acro'),
+        flightMode: (turtleWait || turtleFlip.active) ? 'turtle' : (bankModeOn ? 'bank' : (angleModeOn ? 'angle' : 'acro')),
         /* No damage model, so nothing to count down. How much this run has
          * bounced is still worth telling a pilot, and the OSD says nothing
          * at all until there is something to say. */
@@ -10858,7 +10894,9 @@ export async function boot({ loading, bootStart, mapId }) {
   };
   /* Which control mode the plant is actually in. A rig that thinks it is
    * flying acro and is not measures nothing: angle cannot loop. */
-  window.__flightMode = () => (angleModeOn ? 'angle' : 'acro');
+  window.__flightMode = () => (bankModeOn ? 'bank' : (angleModeOn ? 'angle' : 'acro'));
+  /* Harness hook for the bank aux switch, so shots.js can fly it. */
+  window.__bankSwitch = (on) => { bankSwitch = !!on; syncAngleMode(); return bankModeOn; };
   /*
    * The air, READ BACK OUT OF THE MODULE rather than out of the menu, which
    * is the same discipline the PIDs panel keeps: a slider that stopped
