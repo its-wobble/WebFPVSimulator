@@ -18,7 +18,7 @@
  * attitude loop or the plant; one that swings with the target is the
  * firmware commanding it. The debug columns (DEBUG_BANK, see the DEBUG_SET
  * calls in the Betaflight branch's flight/bank_mode.c) say which estimate
- * moved: speed estimate, vertical speed estimate, thrust to weight.
+ * moved: speed estimate, thrust trim, thrust to weight.
  *
  * THE REPLAY flies the logged sticks at the logged rows' times, switching Bank
  * on and off where the log's "bank active" column does, at the five inch's
@@ -107,7 +107,7 @@ const fmt = (x, d = 1) => (x === undefined || Number.isNaN(x) ? '-' : x.toFixed(
 
 function summarise(rows, title) {
   console.log(`\n${title}`);
-  console.log('   t   | gyroP span dirs | pTgt span | coll      | lift  speed | vz    alt  spd  | speedEst vzEst  T/W');
+  console.log('   t   | gyroP span dirs | pTgt span | coll      | lift  speed | vz    alt  spd  | speedEst  trim  T/W');
   const end = rows.at(-1).t;
   for (let s = Math.floor(rows[0].t / WINDOW_S) * WINDOW_S; s < end; s += WINDOW_S) {
     const w = rows.filter((r) => r.t >= s && r.t < s + WINDOW_S);
@@ -129,7 +129,7 @@ function summarise(rows, title) {
       + `${fmt(Math.min(...w.map((r) => r.coll)), 2)}-${fmt(Math.max(...w.map((r) => r.coll)), 2)} | `
       + `${fmt(mean(w.map((r) => r.lift)), 2)}  ${fmt(mean(w.map((r) => r.speed)), 2)}  | `
       + `${fmt(last.vz).padStart(5)} ${fmt(last.alt, 0).padStart(4)} ${fmt(last.spd).padStart(4)} | `
-      + `${d(0, 1000).padStart(8)} ${d(2, 100).padStart(6)} ${d(4, 100).padStart(5)}${mark}`);
+      + `${d(0, 1000).padStart(8)} ${d(2, 1000).padStart(5)} ${d(4, 100).padStart(5)}${mark}`);
   }
 }
 

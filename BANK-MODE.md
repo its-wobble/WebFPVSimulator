@@ -26,7 +26,7 @@ To see what the quad did over time, rather than just the verdicts:
 npm run check:bank -- --explore
 ```
 
-That prints a row every 0.2 s: phase, speed, vertical speed, roll and pitch against their targets, heading against track, collective, learnt thrust to weight, and the accelerometer reading in g.
+That prints a row every 0.2 s: phase, speed, vertical speed, roll and pitch against their targets, heading against track, collective, thrust to weight (the fixed `bank_thrust_to_weight`), and the accelerometer reading in g.
 
 Run the firmware unit tests first: `make test_bank_unittest` in `/workspaces/betaflight`.
 
@@ -61,7 +61,7 @@ After a firmware edit, run `npm run build:wasm:bank` again and reload the page.
 
 With the bank firmware loaded, every flight is recorded and the page posts the new rows to the dev server every second. They land in `testing-flight-logs/auto/webfpv-bank-<date>-<time>.csv`, one file per page load (a new one if the flight log is turned off and on in Settings). The folder is gitignored. Add `&autolog=0` to the URL to turn it off.
 
-The file is blackbox_decode CSV (sticks, gyro, motors, pack voltage, one row per rendered frame) plus bank columns: the firmware's roll and pitch targets, yaw rate, collective, learnt thrust to weight and accelerometer, then the plant's true attitude, altitude, vertical speed and ground speed, then `debug[0]` to `debug[7]` from the firmware's `DEBUG_BANK` mode: speed estimate and target (0.001 g), vertical speed estimate (0.01 m/s), vertical damping (0.001 g), thrust to weight (0.01), turn gain (0.1), ball (0.001 g) and the vertical force command (0.001 g). The field list is at the `DEBUG_SET` calls in `flight/bank_mode.c`. Only `npm run serve` takes the upload, so restart it after pulling this change. A server or deploy without the route answers with an error and the page stops posting.
+The file is blackbox_decode CSV (sticks, gyro, motors, pack voltage, one row per rendered frame) plus bank columns: the firmware's roll and pitch targets, yaw rate, collective, thrust to weight (the fixed setting) and accelerometer, then the plant's true attitude, altitude, vertical speed and ground speed, then `debug[0]` to `debug[7]` from the firmware's `DEBUG_BANK` mode: speed estimate and target (0.001 g), the fast thrust trim (0.001, 1000 = none, above it the collective's thrust is divided by that much), an unused field, thrust to weight (0.01), turn gain (0.1), ball (0.001 g) and the vertical force command (0.001 g). The field list is at the `DEBUG_SET` calls in `flight/bank_mode.c`. Only `npm run serve` takes the upload, so restart it after pulling this change. A server or deploy without the route answers with an error and the page stops posting.
 
 ### Reading a flight log
 
@@ -72,7 +72,7 @@ npm run bank:log -- --rows 12 14 4        # every 4th row between 12 s and 14 s,
 npm run bank:log -- --replay              # fly the log's sticks through dist/sim-bank.wasm and summarise that too
 ```
 
-In the summary, `gyroP span dirs` is how far the pitch rate swung and how often it changed direction: a large span is an oscillation or a kick. `pTgt span` is how far the firmware's own pitch target moved in the same half second. A pitch rate that swings while the target stays put (marked `pitch swings, target steady`) is the attitude loop or the plant reacting; one that swings with the target is the firmware commanding it, and the debug columns (speed estimate, vertical speed estimate, thrust to weight) show which estimate moved.
+In the summary, `gyroP span dirs` is how far the pitch rate swung and how often it changed direction: a large span is an oscillation or a kick. `pTgt span` is how far the firmware's own pitch target moved in the same half second. A pitch rate that swings while the target stays put (marked `pitch swings, target steady`) is the attitude loop or the plant reacting; one that swings with the target is the firmware commanding it, and the debug columns (speed estimate, thrust trim, thrust to weight) show which estimate moved.
 
 `--replay` flies the logged sticks headless at the five inch's gravity from the ground, switching Bank where the log did, through whatever firmware `dist/sim-bank.wasm` was last built from. It does not follow the logged flight exactly, small differences grow, but it reproduces what those sticks provoke, so a fix can be tried against the flight that showed the problem: edit the firmware, `npm run bank:cycle`, then `npm run bank:log -- FILE --replay` again.
 

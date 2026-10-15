@@ -86,7 +86,10 @@ async function newFlight() {
   if (code !== SIM_OK) {
     throw new Error(`sim_init: ${simErrorName(code)}`);
   }
-  must(sim.setCellVoltage(4.0), 'sim_set_cell_voltage');
+  /* A full pack, as the shell starts (ui.js packVoltage 4.2): the firmware's
+   * bank_thrust_to_weight is fixed and was measured hovering on a full pack,
+   * so a lower voltage makes the centre of the lift stick sink. */
+  must(sim.setCellVoltage(4.2), 'sim_set_cell_voltage');
   /* Flown as the shell flies it: at the five inch's own gravity (1.62 g, the
    * shell's Weight 100) and from the ground. The bank accelerometer reads in
    * the local g (bf_bank.c), so a craft at rest reads 1 g as on Earth; the
@@ -152,8 +155,9 @@ async function sortie() {
    * weight under-delivers, so the craft sits on the ground until lifted. */
   f.sticks({ speed: 0, lift: 0.65 });
   f.fly(0.8, 'takeoff');
-  /* Long enough for the vertical damping to stop the take-off climb before
-   * the last 3 s, which are what the hover rows measure. */
+  /* The centre of the lift stick is 1 g with nothing holding the vertical
+   * speed, so the take-off climb carries on; the hover rows measure the
+   * vertical acceleration, which the centre stick zeroes, not the speed. */
   f.sticks({ speed: 0, lift: 0.5 });
   f.fly(6.0, 'hover');
   f.sticks({ speed: 0.5, lift: 0.5 });
@@ -221,7 +225,7 @@ function measure(f) {
   const stopped = brake.find((x) => x.speedH < 0.5);
   m.brake_time_to_half_mps = stopped ? stopped.t - brake[0].t : 99;
   m.brake_final_speed = brake.at(-1).speedH;
-  m.thrust_to_weight_learnt = f.window('brake').at(-1).tw;
+  m.thrust_to_weight = f.window('brake').at(-1).tw;
   m.mode_off_cleared = f.window('off').at(-1).active;
   return m;
 }
