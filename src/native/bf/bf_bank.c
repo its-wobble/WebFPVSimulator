@@ -55,6 +55,7 @@
 
 #include "platform.h"
 
+#include "build/debug.h"
 #include "common/axis.h"
 #include "common/filter.h"
 #include "common/maths.h"
@@ -77,7 +78,6 @@ extern double SIM_ACC_BODY[3];
 /* The part: ICM-42688-P at +-16 g, as accgyro_spi_icm426xx.c configures it. */
 #define BANK_ACC_1G 2048
 #define BANK_ACC_SAMPLE_HZ 1000
-#define BANK_STANDARD_G 9.80665
 /* 70 ug/sqrt(Hz) datasheet density over the ~500 Hz output bandwidth at
  * 1 kHz ODR, rounded up: 0.0016 g RMS. */
 #define BANK_ACC_NOISE_G_RMS 0.0016
@@ -111,8 +111,15 @@ static double bank_gauss(void) {
 }
 
 static bool sim_acc_read(accDev_t *dev) {
+  /* In units of the LOCAL g, so a craft at rest reads 1 g whatever the
+   * Weight setting: the shell flies the five inch at 1.62 g, and a quad on
+   * Earth never reads more than 1 g at rest. The world at 1.62 g is felt as
+   * a heavier craft, which is what the firmware sees on hardware. At rest
+   * the specific force is the scene's gravity over len_scale (sim.c,
+   * sim_measure_specific_force), so that is the 1 g here. */
+  const double one_g = PLANT_W.gravity * SIM_GRAVITY / PLANT.len_scale;
   for (int a = 0; a < 3; a += 1) {
-    const double g = SIM_ACC_BODY[a] / BANK_STANDARD_G + BANK_ACC_NOISE_G_RMS * bank_gauss();
+    const double g = SIM_ACC_BODY[a] / one_g + BANK_ACC_NOISE_G_RMS * bank_gauss();
     double counts = g * BANK_ACC_1G;
     counts = counts < -32768.0 ? -32768.0 : (counts > 32767.0 ? 32767.0 : counts);
     /* Round to nearest, as the part's ADC does. */
@@ -158,8 +165,9 @@ bool bf_bank_mode_flags(void) {
    * altitude and position hold do not exist in this build. */
   const bool requested = g_bank_switch && sensors(SENSOR_ACC) && !failsafeIsActive();
   if (requested) {
-    flightModeFlags |= BANK_MODE;
-    flightModeFlags &= (uint16_t)~(ANGLE_MODE | HORIZON_MODE);
+    /* BANK is built on ANGLE, as core.c sets it. */
+    flightModeFlags |= BANK_MODE | ANGLE_MODE;
+    flightModeFlags &= (uint16_t)~HORIZON_MODE;
   } else {
     flightModeFlags &= (uint16_t)~BANK_MODE;
   }
@@ -176,6 +184,10 @@ void bf_bank_acc_task(timeUs_t now_us) {
 
 /* processRxModes runs on a new RC frame, before updateRcCommands. */
 void bf_bank_rx_frame(timeUs_t now_us) {
+  /* The bank build always logs DEBUG_BANK: the mode's own estimates go into
+   * debug[] as on a quad with debug_mode = BANK, and the telemetry below
+   * hands them to the flight log. */
+  debugMode = DEBUG_BANK;
   bankModeUpdate(now_us);
 }
 
@@ -183,9 +195,10 @@ void bf_bank_rx_frame(timeUs_t now_us) {
  * Telemetry for the checks and the OSD. These are the firmware's own outputs
  * and inputs, everything a blackbox log of the mode would show:
  *  0 active, 1 roll target deg, 2 pitch target deg, 3 yaw rate dps,
- *  4 collective 0..1, 5 thrust to weight in use, 6..8 filtered acc g (x y z).
+ *  4 collective 0..1, 5 thrust to weight in use, 6..8 filtered acc g (x y z),
+ *  9..16 debug[0..7] of DEBUG_BANK, scaled as bank_mode.c documents them.
  */
-#define BANK_TELEMETRY_COUNT 9
+#define BANK_TELEMETRY_COUNT 17
 int bf_bank_telemetry(double *out, int n) {
   if (n < BANK_TELEMETRY_COUNT) {
     return -1;
@@ -199,6 +212,9 @@ int bf_bank_telemetry(double *out, int n) {
   out[6] = acc.accADC[X] * acc.dev.acc_1G_rec;
   out[7] = acc.accADC[Y] * acc.dev.acc_1G_rec;
   out[8] = acc.accADC[Z] * acc.dev.acc_1G_rec;
+  for (int i = 0; i < 8; i += 1) {
+    out[9 + i] = debug[i];
+  }
   return BANK_TELEMETRY_COUNT;
 }
 

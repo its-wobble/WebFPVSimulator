@@ -70,13 +70,33 @@ const THR_SPAN = 1000;
  * negative pitch. The two negations are one convention, and they are
  * tested against each other by scripts/replay-log.js --selftest.
  */
-export function toBlackboxCsv(samples) {
+/*
+ * Bank mode columns, written only by a bank build (dist/sim-bank.wasm). The
+ * first nine are the firmware's own outputs and inputs (sim_bank_telemetry),
+ * the rest are plant truth for the reader: what the craft really did. Names
+ * are not blackbox's, so a blackbox reader, which picks columns by name,
+ * skips them. The firmware never sees the plant truth; the log is a
+ * diagnostic, like the bank check.
+ */
+export const BANK_COLUMNS = [
+  'bank active', 'bank roll target (deg)', 'bank pitch target (deg)', 'bank yaw rate (deg/s)',
+  'bank collective', 'bank thrust to weight', 'bank acc x (g)', 'bank acc y (g)', 'bank acc z (g)',
+  'roll (deg)', 'pitch (deg)', 'yaw (deg)', 'altitude (m)', 'vz (m/s)', 'speed (m/s)',
+  /* DEBUG_BANK, the mode's own estimates, under blackbox's own names: speed
+   * and target speed (0.001 g), vertical speed (0.01 m/s), vertical damping
+   * (0.001 g), thrust to weight (0.01), turn gain (0.1 deg/s g), ball and the
+   * vertical speed's drag correction (0.001 g). See bank_mode.c. */
+  'debug[0]', 'debug[1]', 'debug[2]', 'debug[3]', 'debug[4]', 'debug[5]', 'debug[6]', 'debug[7]',
+];
+
+export function toBlackboxCsv(samples, { header = true, bank = samples.some((s) => s.bank) } = {}) {
   const head = [
     'time (us)',
     'rcCommand[0]', 'rcCommand[1]', 'rcCommand[2]', 'rcCommand[3]',
     'gyroADC[0]', 'gyroADC[1]', 'gyroADC[2]',
     'motor[0]', 'motor[1]', 'motor[2]', 'motor[3]',
     'vbatLatest (V)',
+    ...(bank ? BANK_COLUMNS : []),
   ].map((n) => `"${n}"`).join(', ');
   const body = samples.map((s) => [
     Math.round(s.tUs),
@@ -87,8 +107,21 @@ export function toBlackboxCsv(samples) {
     s.gyroDps[0], s.gyroDps[1], s.gyroDps[2],
     ...(s.motor ?? [0, 0, 0, 0]).map((d) => d * 2047),
     s.vbat ?? 0,
+    ...(bank ? (s.bank ?? new Array(BANK_COLUMNS.length).fill(0)) : []),
   ].join(', '));
-  return `${head}\n${body.join('\n')}\n`;
+  const rows = body.length > 0 ? `${body.join('\n')}\n` : '';
+  return header ? `${head}\n${rows}` : rows;
+}
+
+/* Roll, pitch and yaw in degrees from the state block's quaternion (w x y z),
+ * Z up, the same convention scripts/bank-check.js reads. Display only. */
+function eulerDeg(w, x, y, z) {
+  const d = 57.29577951308232;
+  return [
+    Math.atan2(2 * (w * x + y * z), 1 - 2 * (x * x + y * y)) * d,
+    Math.asin(Math.max(-1, Math.min(1, 2 * (w * y - z * x)))) * d,
+    Math.atan2(2 * (w * z + x * y), 1 - 2 * (y * y + z * z)) * d,
+  ];
 }
 
 /*
@@ -118,6 +151,10 @@ export class FlightRecorder {
     this.offsetUs = 0;
     this.lastRawUs = -Infinity;
     this.lastOutUs = -Infinity;
+    /* Rows ever pushed since the last clear, ring drops included, so a
+     * reader that takes the log in pieces (the dev server upload) can ask
+     * for what is new since its last piece. */
+    this.pushed = 0;
   }
 
   setEnabled(on) {
@@ -137,6 +174,7 @@ export class FlightRecorder {
     this.offsetUs = 0;
     this.lastRawUs = -Infinity;
     this.lastOutUs = -Infinity;
+    this.pushed = 0;
   }
 
   get count() {
@@ -156,9 +194,10 @@ export class FlightRecorder {
    *
    * `st` is the raw state array and `rc` the channel set last handed to the
    * module, so the pair is what the craft was actually doing and what it
-   * was actually told, read at the same instant.
+   * was actually told, read at the same instant. `bank` is the bank build's
+   * telemetry (sim_bank_telemetry, nine values) or null on any other build.
    */
-  push(st, rc, fullThrottleRpm) {
+  push(st, rc, fullThrottleRpm, bank = null) {
     if (!this.on) {
       return;
     }
@@ -182,11 +221,23 @@ export class FlightRecorder {
        * see the header. */
       motor: [rpmToDuty(st[14]), rpmToDuty(st[15]), rpmToDuty(st[16]), rpmToDuty(st[17])],
       vbat: st[18],
+      bank: bank ? [...bank.slice(0, 9), ...eulerDeg(st[7], st[8], st[9], st[10]), st[3], st[6], Math.hypot(st[4], st[5]),
+        ...Array.from({ length: 8 }, (_, i) => bank[9 + i] ?? 0)] : undefined,
     });
+    this.pushed += 1;
   }
 
   csv() {
     return toBlackboxCsv(this.rows);
+  }
+
+  /* The rows pushed after the first `since` of them, as CSV with or without
+   * the header, and the count to pass next time. Rows the ring already
+   * dropped are gone, so a reader that falls 100000 rows behind gets a gap. */
+  csvSince(since, header) {
+    const fresh = Math.min(this.pushed - since, this.rows.length);
+    const rows = fresh > 0 ? this.rows.slice(this.rows.length - fresh) : [];
+    return { text: toBlackboxCsv(rows, { header, bank: this.rows.some((r) => r.bank) }), next: this.pushed };
   }
 }
 

@@ -152,6 +152,11 @@ import { loadSim, simErrorName, SIM_OK, SIM_ERR_BAD_ARG } from '../tests/lib/sim
  * has it and this URL there is a 404, which the boot path already reports.
  */
 const BANK_FIRMWARE = new URLSearchParams(globalThis.location?.search ?? '').get('fw') === 'bank';
+/* A bank build records every flight and posts it to the dev server every
+ * second (scripts/serve.js writes testing-flight-logs/auto/), so the firmware
+ * work can read the flight that just happened. ?autolog=0 turns it off. */
+const AUTO_FLIGHT_LOG = BANK_FIRMWARE && new URLSearchParams(globalThis.location?.search ?? '').get('autolog') !== '0';
+const AUTO_FLIGHT_LOG_MS = 1000;
 const WASM_URL = new URL(BANK_FIRMWARE ? '../dist/sim-bank.wasm' : '../dist/sim.wasm', import.meta.url).href;
 
 /*
@@ -2753,6 +2758,49 @@ export async function boot({ loading, bootStart, mapId }) {
    */
   const flightLog = new FlightRecorder();
   /*
+   * The automatic upload (AUTO_FLIGHT_LOG). Only the rows pushed since the
+   * last piece go out, so a long session costs the same small post every
+   * second rather than an ever larger CSV built on the main thread. The first
+   * piece of a file carries the header. When the log is cleared (turned off
+   * and on in Settings) a new file starts. A host that does not take the
+   * post (the deploy, a static server) answers with an error, and posting
+   * stops for the session.
+   */
+  if (AUTO_FLIGHT_LOG) {
+    let file = flightLogName('bank');
+    let sent = 0;
+    let headerSent = false;
+    let busy = false;
+    const timer = setInterval(async () => {
+      if (busy || !flightLog.on) {
+        return;
+      }
+      if (flightLog.pushed < sent) {
+        file = flightLogName('bank');
+        sent = 0;
+        headerSent = false;
+      }
+      if (flightLog.pushed === sent) {
+        return;
+      }
+      const piece = flightLog.csvSince(sent, !headerSent);
+      busy = true;
+      try {
+        const res = await fetch(`/__flightlog?file=${encodeURIComponent(file)}`, { method: 'POST', body: piece.text });
+        if (res.ok) {
+          sent = piece.next;
+          headerSent = true;
+        } else {
+          clearInterval(timer);
+        }
+      } catch {
+        clearInterval(timer);
+      } finally {
+        busy = false;
+      }
+    }, AUTO_FLIGHT_LOG_MS);
+  }
+  /*
    * Stick samples waiting for an RC slot, and the value currently held.
    *
    * The old code took `samples[samples.length - 1]` and used it for every RC
@@ -4982,6 +5030,20 @@ export async function boot({ loading, bootStart, mapId }) {
   let bankSwitch = false;
   let bankModeOn = false;
   const bankAvailable = () => typeof sim.e.sim_set_bank_mode === 'function';
+  /* The bank build's telemetry for the flight log: the firmware's targets,
+   * collective, learnt thrust to weight and accelerometer. Null on any other
+   * build. One small buffer in the module's heap, allocated on first use. */
+  let bankTelPtr = 0;
+  const readBankTelemetry = () => {
+    if (!bankAvailable() || typeof sim.e.sim_bank_telemetry !== 'function') {
+      return null;
+    }
+    if (bankTelPtr === 0) {
+      bankTelPtr = sim.e.malloc(32 * 8);
+    }
+    const n = sim.e.sim_bank_telemetry(bankTelPtr, 32);
+    return n > 0 ? new Float64Array(sim.e.memory.buffer, bankTelPtr, n) : null;
+  };
   /* L-switch for launch control. The Settings row only enables the
    * feature; this is the mode switch, captured at the sitting. */
   let lcArmed = false;
@@ -5879,8 +5941,9 @@ export async function boot({ loading, bootStart, mapId }) {
       rcLink.setPreset(s.link);
       rcLink.reset(rcNextMs);
     }
-    if (flightLog.on !== s.flightLog) {
-      flightLog.setEnabled(s.flightLog);
+    const wantFlightLog = s.flightLog || AUTO_FLIGHT_LOG;
+    if (flightLog.on !== wantFlightLog) {
+      flightLog.setEnabled(wantFlightLog);
     }
     audio.setLevel(s.volume / 10);
     audio.setEnabled(s.sound);
@@ -8494,7 +8557,7 @@ export async function boot({ loading, bootStart, mapId }) {
         }
         /* Launch stand constraint runs inside sim_step. Ground contact
          * runs after plant_step at 1 kHz when the plane is raised. */
-        flightLog.push(stateCurr, rcHeld, plantFacts(runAirframe).fullRpm);
+        flightLog.push(stateCurr, rcHeld, plantFacts(runAirframe).fullRpm, flightLog.on ? readBankTelemetry() : null);
       }
       /*
        * Ground is a plane in the plant, not a sphere test after the

@@ -29,6 +29,16 @@ cd /home/devpod/WebFPVSimulator && npm run bank:cycle      # sync, build sim-ban
 
 `bank:cycle` exits non-zero on the first problem and says what it was. `npm run check:bank -- --explore` prints the time series of the sortie, which is how to see *why* a row failed. The report is in `build/bank/report.json`.
 
+## The owner's flights
+
+The checks fly scripted sticks; the owner flies real ones, and twice found problems no sortie provoked (lift-stick feedforward kicking the pitch, and the 1.62 g world reading as climbing). With `?fw=bank` the page records every flight and posts it to `testing-flight-logs/auto/` once a second (BANK-MODE.md, "Flight logs, automatically"). When the owner reports something:
+
+1. `npm run bank:log` summarises the newest log: find the half seconds marked `pitch swings`, and compare the pitch rate against the firmware's pitch target and the `debug[]` columns (`DEBUG_BANK`).
+2. `npm run bank:log -- --rows FROM TO` for the frames around it.
+3. `npm run bank:log -- FILE --replay` flies those sticks headless through the current `dist/sim-bank.wasm`. If it reproduces, fix the firmware and replay again; if it does not, the session differs from the harness (gravity, start on the ground, settings), find out how before changing code.
+
+Keep what was learnt from a log in PROGRESS.md with the file name; the auto folder is gitignored and does not survive a rebuild of the container.
+
 When `bank:sync` reports DRIFT: read `git -C $BF_BANK_SRC diff master -- src/main/<file>`, port the change into the 4.5.1 patch (edit the vendor file, `git -C vendor/betaflight diff > patches/bank/0001-bank-mode-hooks.patch`, `git -C vendor/betaflight checkout -- .`), then `bash scripts/bank-sync.sh --accept`. Never accept without porting.
 
 ## Hard rules
@@ -44,6 +54,8 @@ When `bank:sync` reports DRIFT: read `git -C $BF_BANK_SRC diff master -- src/mai
 
 - Attitude is the plant's true attitude, not `imu.c`'s estimate. On hardware sustained drag biases the estimate, so results here are optimistic about attitude.
 - No accelerometer vibration or residual bias yet (white noise and quantisation only).
+- The bank accelerometer reads in the local g (`bf_bank.c`): a craft at rest reads 1 g whatever the Weight setting. The firmware has no 1 g calibration, so a real sensor's scale error is not modelled or corrected.
+- The checks fly the five inch only (1.62 g, from the ground). The whoop flies at 1.0 g in its room's terms and is not checked.
 - No aux channels: bank is switched by `sim_set_bank_mode` (shell: `?fw=bank`, then B in flight).
 - Browser checks (`lint:shell`, `lint:input`, `shots.js`) need an X display for WebGL. The devcontainer's `SIM_CHROME_BIN` (`/workspaces/betaflight/.devcontainer/chromium-xvfb.sh`) starts Xvfb on `:99` itself. If `echo $SIM_CHROME_BIN` shows `/usr/bin/chromium` instead, run `bash /workspaces/betaflight/.devcontainer/start-xvfb.sh` before the first check; see BANK-MODE.md if they time out on `__shellReady`. They had 8 existing failures on 2026-10-14 unrelated to bank (listed in BANK-MODE.md). The bank loop itself does not need a browser.
 

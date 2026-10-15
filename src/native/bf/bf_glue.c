@@ -1020,6 +1020,9 @@ void bridge_run(const SimState *s, const double rc[4], int rx_new,
    * samples every step whatever the mode, as TASK_ACCEL does. */
   if (bf_bank_mode_flags()) {
     bf_feed_attitude(s);
+  } else if (!g_angle_mode) {
+    /* BANK sets ANGLE under it; take ANGLE down with BANK in acro. */
+    flightModeFlags &= (uint16_t)~ANGLE_MODE;
   }
   bf_bank_acc_task(now_us);
 #endif

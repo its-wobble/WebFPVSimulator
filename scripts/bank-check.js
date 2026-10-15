@@ -2,7 +2,8 @@
  * bank-check.js: fly the bank flight mode headless and measure it.
  *
  * Loads dist/sim-bank.wasm (npm run build:wasm:bank), flies scripted stick
- * scenarios in bank mode in free air, and prints one row per measurement with
+ * scenarios in bank mode at the five inch's gravity, taking off from the
+ * ground as the shell does, and prints one row per measurement with
  * its band from tests/bank-thresholds.json. Exit 1 if any row fails, so an
  * agent can loop on it. Writes build/bank/report.json with every value.
  *
@@ -34,6 +35,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { airframeById } from '../configs/airframes.js';
 import { RATE_DEFAULTS } from '../configs/rates.js';
 import { composeConfig, RATES_KEEP } from '../src/fc/dump.js';
 import { loadSim, SIM_OK, simErrorName } from '../tests/lib/simmod.js';
@@ -85,8 +87,16 @@ async function newFlight() {
     throw new Error(`sim_init: ${simErrorName(code)}`);
   }
   must(sim.setCellVoltage(4.0), 'sim_set_cell_voltage');
+  /* Flown as the shell flies it: at the five inch's own gravity (1.62 g, the
+   * shell's Weight 100) and from the ground. The bank accelerometer reads in
+   * the local g (bf_bank.c), so a craft at rest reads 1 g as on Earth; the
+   * module's default 1.0 g in free air hid that the shell's world once read
+   * 1.62 g at rest, and the owner's flights oscillated for it (PROGRESS.md,
+   * 2026-10-15). */
+  must(sim.e.sim_set_gravity(airframeById('5inch').gravityBase), 'sim_set_gravity');
   must(sim.reset(), 'sim_reset');
-  const telPtr = sim.e.malloc(16 * 8);
+  must(sim.e.sim_set_ground(1, 0, 0, 1, 0, 0, 0, 0.55, 0.28), 'sim_set_ground');
+  const telPtr = sim.e.malloc(32 * 8);
   let t = 0;
   let sticks = channels({});
   const samples = [];
@@ -103,7 +113,7 @@ async function newFlight() {
         must(sim.step(STEP_HZ / RX_HZ), 'sim_step');
         t += 1 / RX_HZ;
         const { state } = sim.readState();
-        const n = sim.e.sim_bank_telemetry(telPtr, 16);
+        const n = sim.e.sim_bank_telemetry(telPtr, 32);
         const tel = Array.from(new Float64Array(sim.e.memory.buffer, telPtr, n));
         const e = eulerOf(state.slice(7, 11));
         const v = state.slice(4, 7);
@@ -138,7 +148,14 @@ async function sortie() {
   f.sticks({ speed: 0, lift: 0.5 });
   f.bank(true);
   f.fly(1.0, 'engage');
-  f.fly(4.0, 'hover');
+  /* At the centre the lift stick asks for 1 g, which the default thrust to
+   * weight under-delivers, so the craft sits on the ground until lifted. */
+  f.sticks({ speed: 0, lift: 0.65 });
+  f.fly(0.8, 'takeoff');
+  /* Long enough for the vertical damping to stop the take-off climb before
+   * the last 3 s, which are what the hover rows measure. */
+  f.sticks({ speed: 0, lift: 0.5 });
+  f.fly(6.0, 'hover');
   f.sticks({ speed: 0.5, lift: 0.5 });
   f.fly(8.0, 'cruise');
   f.sticks({ speed: 0.5, lift: 0.5, bank: 0.6 });

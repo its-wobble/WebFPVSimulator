@@ -20,7 +20,7 @@
  */
 
 import http from 'node:http';
-import { stat } from 'node:fs/promises';
+import { appendFile, mkdir, stat } from 'node:fs/promises';
 import { createReadStream } from 'node:fs';
 import { join, normalize, extname, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -171,10 +171,60 @@ const BANK_WASM = join(root, 'dist', 'sim-bank.wasm');
 const bankDefault = () =>
   process.env.SIM_FW !== 'normal' && stat(BANK_WASM).then((info) => info.isFile(), () => false);
 
+/*
+ * Flight logs from the page, for the dev server only. A bank build records
+ * every flight (src/main.js, AUTO_FLIGHT_LOG) and posts the new rows here
+ * every second; they are appended to testing-flight-logs/auto/<file>, one file
+ * per page load, so whoever is working on the firmware can read the flight
+ * that just happened without the pilot downloading anything. The deploy has
+ * no such route, the page sees the 404 and stops posting.
+ */
+const FLIGHT_LOG_DIR = join(root, 'testing-flight-logs', 'auto');
+const FLIGHT_LOG_MAX_BYTES = 16 * 1024 * 1024;
+
+function receiveFlightLog(req, res, url) {
+  const file = url.searchParams.get('file') ?? '';
+  if (req.method !== 'POST' || !/^[\w.-]{1,100}\.csv$/.test(file)) {
+    res.writeHead(400);
+    res.end('bad request');
+    return;
+  }
+  const chunks = [];
+  let size = 0;
+  req.on('data', (c) => {
+    size += c.length;
+    if (size > FLIGHT_LOG_MAX_BYTES) {
+      res.writeHead(413);
+      res.end('too large');
+      req.destroy();
+      return;
+    }
+    chunks.push(c);
+  });
+  req.on('end', async () => {
+    if (size > FLIGHT_LOG_MAX_BYTES) {
+      return;
+    }
+    try {
+      await mkdir(FLIGHT_LOG_DIR, { recursive: true });
+      await appendFile(join(FLIGHT_LOG_DIR, file), Buffer.concat(chunks));
+      res.writeHead(204, { 'cache-control': 'no-store' });
+      res.end();
+    } catch {
+      res.writeHead(500);
+      res.end('write failed');
+    }
+  });
+}
+
 http
   .createServer(async (req, res) => {
     try {
       const url = new URL(req.url, 'http://localhost');
+      if (url.pathname === '/__flightlog') {
+        receiveFlightLog(req, res, url);
+        return;
+      }
       if ((url.pathname === '/' || url.pathname === '/index.html') && !url.searchParams.has('fw')
           && await bankDefault()) {
         url.searchParams.set('fw', 'bank');

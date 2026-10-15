@@ -11,6 +11,8 @@ cd ~/WebFPVSimulator
 npm run bank:cycle
 ```
 
+The sortie flies the five inch as the shell does, at its own gravity (1.62 g) and from the ground: it engages Bank on the ground, takes off with the lift stick, then hovers, cruises, turns, head checks and brakes.
+
 This copies the bank mode from your Betaflight working tree (uncommitted edits included), builds `dist/sim-bank.wasm`, checks `vendor/betaflight` is still clean, and flies a scripted sortie: hover, cruise, turn, head check, brake. It prints one row per measurement:
 
 - `PASS` / `FAIL` against the band in `tests/bank-thresholds.json`. The bands come from the spec, not from a measured run.
@@ -45,13 +47,36 @@ Sticks in Bank (mode 2):
 | Stick | Does |
 |---|---|
 | Throttle | Forward speed. Bottom is stopped (and brakes), top is the fastest speed. |
-| Yaw | Bank left or right, which turns the craft. |
-| Pitch | Lift. Centre holds 1 g (no vertical acceleration), bottom is no lift, top is full thrust as lift. |
+| Yaw | Bank left or right, which turns the craft. Full stick is as steep as the craft can hold a coordinated turn: about 75 degrees at speed on the five inch, less when slow. |
+| Pitch | Lift. Centre holds the height (it stops climbs and sinks), bottom is no lift, top is full thrust as lift. Above the centre the stick is gentle at first and steepens towards the top. |
 | Roll | Look around (head check). The nose turns, the direction of travel does not, and it springs back when centred. |
+
+When the thrust runs out, lift is kept first, then the bank, and the forward speed gives way first. A quarter of the spare thrust is always kept back so the craft can still be steered at the limit. Take off with the lift stick: at the centre the craft only just holds its weight.
 
 Bank needs a gamepad or radio. Keys are on or off, so they cannot hold a speed or a bank angle. B is a keyboard key either way: the sim reads only four stick channels, so no aux switch is mapped yet.
 
 After a firmware edit, run `npm run build:wasm:bank` again and reload the page.
+
+### Flight logs, automatically
+
+With the bank firmware loaded, every flight is recorded and the page posts the new rows to the dev server every second. They land in `testing-flight-logs/auto/webfpv-bank-<date>-<time>.csv`, one file per page load (a new one if the flight log is turned off and on in Settings). The folder is gitignored. Add `&autolog=0` to the URL to turn it off.
+
+The file is blackbox_decode CSV (sticks, gyro, motors, pack voltage, one row per rendered frame) plus bank columns: the firmware's roll and pitch targets, yaw rate, collective, learnt thrust to weight and accelerometer, then the plant's true attitude, altitude, vertical speed and ground speed, then `debug[0]` to `debug[7]` from the firmware's `DEBUG_BANK` mode: speed estimate and target (0.001 g), vertical speed estimate (0.01 m/s), vertical damping (0.001 g), thrust to weight (0.01), turn gain (0.1), ball (0.001 g) and the vertical force command (0.001 g). The field list is at the `DEBUG_SET` calls in `flight/bank_mode.c`. Only `npm run serve` takes the upload, so restart it after pulling this change. A server or deploy without the route answers with an error and the page stops posting.
+
+### Reading a flight log
+
+```bash
+npm run bank:log                          # the newest log, half a second per row while Bank is on
+npm run bank:log -- path/to/log.csv       # a given log
+npm run bank:log -- --rows 12 14 4        # every 4th row between 12 s and 14 s, every column that matters
+npm run bank:log -- --replay              # fly the log's sticks through dist/sim-bank.wasm and summarise that too
+```
+
+In the summary, `gyroP span dirs` is how far the pitch rate swung and how often it changed direction: a large span is an oscillation or a kick. `pTgt span` is how far the firmware's own pitch target moved in the same half second. A pitch rate that swings while the target stays put (marked `pitch swings, target steady`) is the attitude loop or the plant reacting; one that swings with the target is the firmware commanding it, and the debug columns (speed estimate, vertical speed estimate, thrust to weight) show which estimate moved.
+
+`--replay` flies the logged sticks headless at the five inch's gravity from the ground, switching Bank where the log did, through whatever firmware `dist/sim-bank.wasm` was last built from. It does not follow the logged flight exactly, small differences grow, but it reproduces what those sticks provoke, so a fix can be tried against the flight that showed the problem: edit the firmware, `npm run bank:cycle`, then `npm run bank:log -- FILE --replay` again.
+
+The auto folder is gitignored and lives in the container, so it does not survive a rebuild. Copy a log that matters somewhere safe and note what it showed in PROGRESS.md.
 
 ## If something is wrong
 
@@ -68,5 +93,6 @@ The firmware sees only what a flight controller has: gyro, an ICM-42688-style ac
 
 - Attitude is the sim's true pose, not Betaflight's estimate. On a real quad, sustained drag pulls that estimate off.
 - The accelerometer has no frame vibration and no residual bias, only noise and rounding.
+- The accelerometer reads in the local g: the shell flies the five inch at 1.62 g, and a craft at rest reads 1 g, as a heavier quad on Earth would. The firmware has no 1 g calibration of its own, so on hardware a few percent of accelerometer scale error is not corrected.
 
 How it feels to fly is never verified by the checks. That is your call when you fly it.
