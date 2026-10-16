@@ -83,10 +83,14 @@ export const BANK_COLUMNS = [
   'bank collective', 'bank thrust to weight', 'bank acc x (g)', 'bank acc y (g)', 'bank acc z (g)',
   'roll (deg)', 'pitch (deg)', 'yaw (deg)', 'altitude (m)', 'vz (m/s)', 'speed (m/s)',
   /* DEBUG_BANK, the mode's own estimates, under blackbox's own names: speed
-   * and target speed (0.001 g), vertical speed (0.01 m/s), vertical damping
-   * (0.001 g), thrust to weight (0.01), turn gain (0.1 deg/s g), ball and the
-   * vertical speed's drag correction (0.001 g). See bank_mode.c. */
+   * and target speed (0.001 g), thrust trim (0.001), forward force command
+   * (0.001 g), thrust to weight (0.01), turn gain (0.1 deg/s g), ball and
+   * vertical force command (0.001 g). See the DEBUG_SET calls in bank_mode.c. */
   'debug[0]', 'debug[1]', 'debug[2]', 'debug[3]', 'debug[4]', 'debug[5]', 'debug[6]', 'debug[7]',
+  /* Plant truth again: the direction of travel, in the same convention as
+   * 'yaw (deg)', so yaw - track is where the nose really pointed. Appended
+   * last so older logs and readers by name keep working. */
+  'track (deg)',
 ];
 
 export function toBlackboxCsv(samples, { header = true, bank = samples.some((s) => s.bank) } = {}) {
@@ -195,7 +199,7 @@ export class FlightRecorder {
    * `st` is the raw state array and `rc` the channel set last handed to the
    * module, so the pair is what the craft was actually doing and what it
    * was actually told, read at the same instant. `bank` is the bank build's
-   * telemetry (sim_bank_telemetry, nine values) or null on any other build.
+   * telemetry (sim_bank_telemetry, 17 values) or null on any other build.
    */
   push(st, rc, fullThrottleRpm, bank = null) {
     if (!this.on) {
@@ -222,7 +226,8 @@ export class FlightRecorder {
       motor: [rpmToDuty(st[14]), rpmToDuty(st[15]), rpmToDuty(st[16]), rpmToDuty(st[17])],
       vbat: st[18],
       bank: bank ? [...bank.slice(0, 9), ...eulerDeg(st[7], st[8], st[9], st[10]), st[3], st[6], Math.hypot(st[4], st[5]),
-        ...Array.from({ length: 8 }, (_, i) => bank[9 + i] ?? 0)] : undefined,
+        ...Array.from({ length: 8 }, (_, i) => bank[9 + i] ?? 0),
+        Math.atan2(st[5], st[4]) * 57.29577951308232] : undefined,
     });
     this.pushed += 1;
   }

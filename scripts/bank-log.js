@@ -8,6 +8,7 @@
  *   npm run bank:log                       summary of the newest log, half a second per row
  *   npm run bank:log -- FILE               the same for a given file
  *   npm run bank:log -- --rows 12 14 [N]   every Nth row (default 5) between 12 s and 14 s
+ *   npm run bank:log -- --rows 12 14 --replay   the same rows of the replayed flight
  *   npm run bank:log -- --replay           fly the log's sticks through dist/sim-bank.wasm and
  *                                          summarise that flight the same way, beside the log's
  *
@@ -98,6 +99,11 @@ function parseLog(text) {
     vz: at(r, 'vz (m/s)'),
     spd: at(r, 'speed (m/s)'),
     dbg: [0, 1, 2, 3, 4, 5, 6, 7].map((i) => at(r, `debug[${i}]`)),
+    roll: at(r, 'roll (deg)'),
+    yaw: at(r, 'yaw (deg)'),
+    yawTgt: at(r, 'bank yaw rate (deg/s)'),
+    /* the direction of travel, in logs from 2026-10-16 on (undefined before) */
+    track: at(r, 'track (deg)'),
   }));
 }
 
@@ -133,12 +139,18 @@ function summarise(rows, title) {
   }
 }
 
+const wrap180 = (a) => ((((a + 180) % 360) + 360) % 360) - 180;
+
 function dumpRows(rows, from, to, every) {
   for (const [i, r] of rows.entries()) {
     if (r.t >= from && r.t <= to && i % every === 0) {
+      /* The yaw rate target, and where the nose really pointed from the travel (plant truth, yaw - track). Only in
+       * logs that have the track. */
+      const look = r.track === undefined ? '' : ` | yaw ${fmt(r.yawTgt, 0)}`
+        + ` nose ${r.spd > 1 ? fmt(wrap180(r.yaw - r.track), 0) : '-'}`;
       console.log(`${r.t.toFixed(3)} act ${r.active} lift ${fmt(r.lift, 2)} speed ${fmt(r.speed, 2)} bank ${fmt(r.bank, 2)} head ${fmt(r.head, 2)}`
-        + ` | gyroP ${fmt(r.gyroP, 0)} pitch ${fmt(r.pitch)}/${fmt(r.pTgt)} roll tgt ${fmt(r.rTgt)} | coll ${fmt(r.coll, 3)}`
-        + ` | alt ${fmt(r.alt)} vz ${fmt(r.vz)} spd ${fmt(r.spd)} | debug ${r.dbg.map((x) => fmt(x, 0)).join(' ')}`);
+        + ` | gyroP ${fmt(r.gyroP, 0)} pitch ${fmt(r.pitch)}/${fmt(r.pTgt)} roll ${fmt(r.roll)}/${fmt(r.rTgt)} | coll ${fmt(r.coll, 3)}`
+        + ` | alt ${fmt(r.alt)} vz ${fmt(r.vz)} spd ${fmt(r.spd)}${look} | debug ${r.dbg.map((x) => fmt(x, 0)).join(' ')}`);
     }
   }
 }
@@ -183,6 +195,10 @@ async function replay(rows) {
       t: t + t0, head: r.head, lift: r.lift, bank: r.bank, speed: r.speed,
       gyroP: (pitch - prevPitch) * RX_HZ, active: tel[0], pTgt: tel[2], rTgt: tel[1], coll: tel[4], pitch,
       alt: state[3], vz: state[6], spd: Math.hypot(state[4], state[5]), dbg: tel.slice(9, 17),
+      roll: Math.atan2(2 * (w * x + y * z), 1 - 2 * (x * x + y * y)) * DEG,
+      yaw: Math.atan2(2 * (w * z + x * y), 1 - 2 * (y * y + z * z)) * DEG,
+      yawTgt: tel[3],
+      track: Math.atan2(state[5], state[4]) * DEG,
     });
     prevPitch = pitch;
   }
@@ -195,7 +211,9 @@ const rows = parseLog(await readFile(file, 'utf8'));
 console.log(`${file}: ${rows.length} rows over ${fmt(rows.at(-1).t - rows[0].t)} s, about ${fmt(rows.length / (rows.at(-1).t - rows[0].t), 0)} rows/s`);
 if (flag('--rows') >= 0) {
   const i = flag('--rows');
-  dumpRows(rows, Number(args[i + 1] ?? 0), Number(args[i + 2] ?? 1e9), Number(args[i + 3] ?? 5));
+  /* with --replay, the replayed flight's rows (250 Hz) instead of the log's */
+  const source = flag('--replay') >= 0 ? await replay(rows) : rows;
+  dumpRows(source, Number(args[i + 1] ?? 0), Number(args[i + 2] ?? 1e9), Number(args[i + 3] ?? 5));
 } else {
   summarise(rows, 'LOG (Bank on, half second per row)');
   if (flag('--replay') >= 0) {

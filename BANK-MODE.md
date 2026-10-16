@@ -61,7 +61,7 @@ After a firmware edit, run `npm run build:wasm:bank` again and reload the page.
 
 With the bank firmware loaded, every flight is recorded and the page posts the new rows to the dev server every second. They land in `testing-flight-logs/auto/webfpv-bank-<date>-<time>.csv`, one file per page load (a new one if the flight log is turned off and on in Settings). The folder is gitignored. Add `&autolog=0` to the URL to turn it off.
 
-The file is blackbox_decode CSV (sticks, gyro, motors, pack voltage, one row per rendered frame) plus bank columns: the firmware's roll and pitch targets, yaw rate, collective, thrust to weight (the fixed setting) and accelerometer, then the plant's true attitude, altitude, vertical speed and ground speed, then `debug[0]` to `debug[7]` from the firmware's `DEBUG_BANK` mode: speed estimate and target (0.001 g; the target stops at the mid speed, the upper half of the stick is a force), the fast thrust trim (0.001, 1000 = none; the thrust the collective is modelled to make is multiplied by it, so above 1000 the props make more than modelled and below it less, as in fast forward flight), the forward force command (0.001 g), thrust to weight (0.01), turn gain (0.1), ball (0.001 g) and the vertical force command (0.001 g). The field list is at the `DEBUG_SET` calls in `flight/bank_mode.c`. Only `npm run serve` takes the upload, so restart it after pulling this change. A server or deploy without the route answers with an error and the page stops posting.
+The file is blackbox_decode CSV (sticks, gyro, motors, pack voltage, one row per rendered frame) plus bank columns: the firmware's roll and pitch targets, yaw rate, collective, thrust to weight (the fixed setting) and accelerometer, then the plant's true attitude, altitude, vertical speed and ground speed, then `debug[0]` to `debug[7]` from the firmware's `DEBUG_BANK` mode: speed estimate and target (0.001 g; the target stops at the mid speed, the upper half of the stick is a force), the fast thrust trim (0.001, 1000 = none; the thrust the collective is modelled to make is multiplied by it, so above 1000 the props make more than modelled and below it less, as in fast forward flight), the forward force command (0.001 g), thrust to weight (0.01), turn gain (0.1), ball (0.001 g) and the vertical force command (0.001 g). The field list is at the `DEBUG_SET` calls in `flight/bank_mode.c`. Logs from 2026-10-16 on end with the plant's true direction of travel, `track (deg)`, so `yaw - track` is where the nose really pointed. `--rows` prints it with the yaw rate target as `yaw ... nose ...`. Only `npm run serve` takes the upload, so restart it after pulling this change. A server or deploy without the route answers with an error and the page stops posting.
 
 ### Reading a flight log
 
@@ -69,6 +69,7 @@ The file is blackbox_decode CSV (sticks, gyro, motors, pack voltage, one row per
 npm run bank:log                          # the newest log, half a second per row while Bank is on
 npm run bank:log -- path/to/log.csv       # a given log
 npm run bank:log -- --rows 12 14 4        # every 4th row between 12 s and 14 s, every column that matters
+npm run bank:log -- --rows 12 14 4 --replay   # the same rows of the replayed flight
 npm run bank:log -- --replay              # fly the log's sticks through dist/sim-bank.wasm and summarise that too
 ```
 
