@@ -46,9 +46,9 @@ Sticks in Bank (mode 2):
 
 | Stick | Does |
 |---|---|
-| Throttle | Forward speed. Bottom is stopped (and brakes), top is the fastest speed. |
+| Throttle | Speed. The lower half is a forward speed: bottom is stopped, the centre is `bank_mid_speed` (about 20 m/s on the five inch). Only the bottom third brakes when you are faster than the stick's speed; between a third and the centre the craft coasts down to it. The upper half is a forward force, from what the centre gives to full forward force at the top: the same top speed as at full throttle in acro (about 40 m/s). Braking tilts back no further than `bank_max_brake_angle`. |
 | Yaw | Bank left or right, which turns the craft. Full stick is as steep as the craft can hold a coordinated turn: about 75 degrees at speed on the five inch, less when slow. |
-| Pitch | Lift. Centre holds the height (it stops climbs and sinks), bottom is no lift, top is full thrust as lift. Above the centre the stick is gentle at first and steepens towards the top. |
+| Pitch | Lift: the vertical force. Centre is 1 g, which balances the weight, so there is no vertical acceleration: a climb or a sink carries on until you stop it, and the height is not held. Bottom is no lift, top is full thrust as lift. Above the centre the stick is gentle at first and steepens towards the top. |
 | Roll | Look around (head check). The nose turns, the direction of travel does not, and it springs back when centred. |
 
 When the thrust runs out, lift is kept first, then the bank, and the forward speed gives way first. A quarter of the spare thrust is always kept back so the craft can still be steered at the limit. Take off with the lift stick: at the centre the craft only just holds its weight.
@@ -61,7 +61,7 @@ After a firmware edit, run `npm run build:wasm:bank` again and reload the page.
 
 With the bank firmware loaded, every flight is recorded and the page posts the new rows to the dev server every second. They land in `testing-flight-logs/auto/webfpv-bank-<date>-<time>.csv`, one file per page load (a new one if the flight log is turned off and on in Settings). The folder is gitignored. Add `&autolog=0` to the URL to turn it off.
 
-The file is blackbox_decode CSV (sticks, gyro, motors, pack voltage, one row per rendered frame) plus bank columns: the firmware's roll and pitch targets, yaw rate, collective, thrust to weight (the fixed setting) and accelerometer, then the plant's true attitude, altitude, vertical speed and ground speed, then `debug[0]` to `debug[7]` from the firmware's `DEBUG_BANK` mode: speed estimate and target (0.001 g), the fast thrust trim (0.001, 1000 = none, above it the collective's thrust is divided by that much), an unused field, thrust to weight (0.01), turn gain (0.1), ball (0.001 g) and the vertical force command (0.001 g). The field list is at the `DEBUG_SET` calls in `flight/bank_mode.c`. Only `npm run serve` takes the upload, so restart it after pulling this change. A server or deploy without the route answers with an error and the page stops posting.
+The file is blackbox_decode CSV (sticks, gyro, motors, pack voltage, one row per rendered frame) plus bank columns: the firmware's roll and pitch targets, yaw rate, collective, thrust to weight (the fixed setting) and accelerometer, then the plant's true attitude, altitude, vertical speed and ground speed, then `debug[0]` to `debug[7]` from the firmware's `DEBUG_BANK` mode: speed estimate and target (0.001 g; the target stops at the mid speed, the upper half of the stick is a force), the fast thrust trim (0.001, 1000 = none; the thrust the collective is modelled to make is multiplied by it, so above 1000 the props make more than modelled and below it less, as in fast forward flight), the forward force command (0.001 g), thrust to weight (0.01), turn gain (0.1), ball (0.001 g) and the vertical force command (0.001 g). The field list is at the `DEBUG_SET` calls in `flight/bank_mode.c`. Only `npm run serve` takes the upload, so restart it after pulling this change. A server or deploy without the route answers with an error and the page stops posting.
 
 ### Reading a flight log
 
