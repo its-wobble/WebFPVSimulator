@@ -47,9 +47,9 @@ Sticks in Bank (mode 2):
 | Stick | Does |
 |---|---|
 | Throttle | Speed. The lower half is a forward speed: bottom is stopped, the centre is `bank_mid_speed` (about 20 m/s on the five inch). Only the bottom third brakes when you are faster than the stick's speed; between a third and the centre the craft coasts down to it. The upper half is a forward force, from what the centre gives to full forward force at the top: the same top speed as at full throttle in acro (about 40 m/s). Braking tilts back no further than `bank_max_brake_angle`. |
-| Yaw | Bank left or right, which turns the craft. Full stick is as steep as the craft can hold a coordinated turn: about 75 degrees at speed on the five inch, less when slow. |
+| Yaw | Look around (head check). The nose turns, the direction of travel does not, and it springs back when centred. |
 | Pitch | Lift: the vertical force. Centre is 1 g, which balances the weight, so there is no vertical acceleration: a climb or a sink carries on until you stop it, and the height is not held. Bottom is no lift, top is full thrust as lift. Above the centre the stick is gentle at first and steepens towards the top. |
-| Roll | Look around (head check). The nose turns, the direction of travel does not, and it springs back when centred. |
+| Roll | Bank left or right, which turns the craft. Full stick is as steep as the craft can hold a coordinated turn: about 75 degrees at speed on the five inch, less when slow. |
 
 When the thrust runs out, lift is kept first, then the bank, and the forward speed gives way first. A quarter of the spare thrust is always kept back so the craft can still be steered at the limit. Take off with the lift stick: at the centre the craft only just holds its weight.
 
