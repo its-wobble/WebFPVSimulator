@@ -1,6 +1,6 @@
-fc/rc.c 8
+fc/rc.c 7
 fc/rc_modes.h 2
 fc/runtime_config.h 2
-flight/pid.c 15
+flight/pid.c 14
 flight/mixer.c 4
 pg/pg_ids.h 1

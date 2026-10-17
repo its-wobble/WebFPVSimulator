@@ -70700,3 +70700,11 @@ Latency: a static asset with no per-frame work, plus 58 KB of bytes at load for 
 - Measured (scratch harness, `LOOK=` sets it through the boot config): 0 matches a build with the look removed, 100 the build before. At 50 a full bank does what the Speed stick asks (holds speed at centre, slows to 5.9 m/s at the bottom); at 0 a held full bank speeds up 17 to 27 m/s and at 100 it slows to 11, because the ball centres 15 to 30 degrees off the track in steep banks either way. Numbers in the Betaflight branch's project_plan.md.
 - `bank:check` at 0: 22 of 23, `turn_ball_g` -0.112 (was -0.643). Betaflight `make test` and `make checks` pass. Nobody has flown look dot with today's fixes.
 
+
+## 2026-10-18 | bank | Blue-sky rewrite of the firmware: one thrust vector, 14 settings to 4
+
+- Ask: the owner asked for bank mode to be rebuilt from its intent as simply as possible, a little less refined if that buys a lot of simplicity. Design, ablation and numbers are in the Betaflight branch's project_plan.md ("Rewrite (2026-10-18)"); the state before it is in `/workspaces/betaflight/.bank-snapshots/2026-10-18-pre-rewrite/`.
+- Simulator: `bf_settings.c` keeps only `bank_thrust_to_weight`, `bank_mid_speed`, `bank_head_check_range` and `bank_look_turn`; the hook patch follows the branch's shorter comments in rc.c and pid.c (no code change, `bank-sync.sh --accept` after porting); BANK-MODE.md no longer names `bank_max_brake_angle`. `DEBUG_BANK` 5 is now the turn feedforward (0.1 deg/s), not the turn gain. No ABI or default build change.
+- `bank:check` 22 of 23 as before, `turn_ball_g` -0.138 (-0.127 before). Betaflight `make test`, `make checks`, SITL and STM32F405 builds pass. vendor clean.
+- Learnt about the tooling: replays of whole logs from the ground diverge in height within seconds (232749 hits the ground at 5 s in every build), and even 10 s segments from a scripted cruise are chaotic (a 1 degree `bank_head_check_range` change moves yaw saturation 1.5 to 8.9 %). Read them for gross failures only, and compare builds over several imperceptibly perturbed runs.
+- Not run: `npm run verify`, browser lints, `shots.js`. Nobody has flown it.

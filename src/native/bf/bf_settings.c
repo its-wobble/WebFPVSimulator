@@ -234,17 +234,7 @@ void bf_settings_build(void) {
   {
     bankModeConfig_t *b = bankModeConfigMutable();
     U16("bank_thrust_to_weight", b->thrustToWeight);
-    U8("bank_max_bank_angle", b->maxBankAngle);
-    U8("bank_max_brake_angle", b->maxBrakeAngle);
-    U8("bank_stick_deadband", b->stickDeadband);
     U8("bank_head_check_range", b->headCheckRange);
-    U16("bank_head_check_rate", b->headCheckRate);
-    U16("bank_ball_kp", b->ballKp);
-    U16("bank_ball_ki", b->ballKi);
-    U16("bank_ball_deadband", b->ballDeadband);
-    U16("bank_yaw_max_rate", b->yawMaxRate);
-    U16("bank_speed_kp", b->speedKp);
-    U16("bank_speed_deadband", b->speedDeadband);
     U16("bank_mid_speed", b->midSpeed);
     U8("bank_look_turn", b->lookTurn);
   }

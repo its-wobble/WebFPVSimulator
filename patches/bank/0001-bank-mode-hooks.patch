@@ -21,7 +21,7 @@ index ab4c0169a..780a00693 100644
  } debugType_e;
  
 diff --git a/src/main/fc/rc.c b/src/main/fc/rc.c
-index 0cf640b48..c5a9da016 100644
+index 0cf640b48..4fecae246 100644
 --- a/src/main/fc/rc.c
 +++ b/src/main/fc/rc.c
 @@ -40,6 +40,7 @@
@@ -32,15 +32,13 @@ index 0cf640b48..c5a9da016 100644
  #include "flight/failsafe.h"
  #include "flight/imu.h"
  #include "flight/gps_rescue.h"
-@@ -660,11 +661,25 @@ FAST_CODE void processRcCommand(void)
+@@ -660,11 +661,23 @@ FAST_CODE void processRcCommand(void)
                  angleRate = applyRates(axis, rcCommandf, rcCommandfAbs);
              }
  
 +#ifdef USE_BANK_MODE
 +            if (FLIGHT_MODE(BANK_MODE)) {
-+                // Bank mode owns all three axes. Its sticks are speed, bank, lift and head check, which it reads from
-+                // the deflection, so none of them is also a rate here: roll and pitch are levelled to its own angle
-+                // targets (no stick setpoint for feedforward or crash detection to see), and the yaw follows the travel.
++                // bank mode sets roll and pitch as angle targets in pidLevel(), and the yaw rate itself
 +                angleRate = (axis == FD_YAW) ? bankModeGetYawRate() : 0.0f;
 +            }
 +#endif
@@ -52,7 +50,7 @@ index 0cf640b48..c5a9da016 100644
          calculateFeedforward(&pidRuntime, axis);
 +#ifdef USE_BANK_MODE
 +        if (FLIGHT_MODE(BANK_MODE)) {
-+            feedforwardRaw[axis] = 0.0f;    // the bank yaw rate is computed, not a stick to anticipate
++            feedforwardRaw[axis] = 0.0f;    // the setpoints are computed, not stick inputs
 +        }
 +#endif
  #endif // USE_FEEDFORWARD
@@ -124,7 +122,7 @@ index 6faed644d..ad22eafb7 100644
  #ifdef USE_DYN_IDLE
          if (mixerRuntime.dynIdleMinRps > 0.0f) {
 diff --git a/src/main/flight/pid.c b/src/main/flight/pid.c
-index e7f818cb8..499001982 100644
+index e7f818cb8..72e654f8e 100644
 --- a/src/main/flight/pid.c
 +++ b/src/main/flight/pid.c
 @@ -46,6 +46,7 @@
@@ -159,7 +157,7 @@ index e7f818cb8..499001982 100644
  #ifdef USE_GPS_RESCUE
      angleTarget += gpsRescueAngle[axis] / 100.0f; // Angle is in centidegrees, stepped on roll at 10Hz but not on pitch
  #endif
-@@ -397,9 +406,17 @@ STATIC_UNIT_TESTED FAST_CODE_NOINLINE float pidLevel(int axis, const pidProfile_
+@@ -397,9 +406,16 @@ STATIC_UNIT_TESTED FAST_CODE_NOINLINE float pidLevel(int axis, const pidProfile_
      // minimise cross-axis wobble due to faster yaw responses than roll or pitch, and make co-ordinated yaw turns
      // by compensating for the effect of yaw on roll while pitched, and on pitch while rolled
      // earthRef code here takes about 76 cycles, if conditional on angleEarthRef it takes about 100.  sin_approx costs most of those cycles.
@@ -167,8 +165,7 @@ index e7f818cb8..499001982 100644
 +    float crossAngle = pidRuntime.angleTarget[axis == FD_ROLL ? FD_PITCH : FD_ROLL];
 +#ifdef USE_BANK_MODE
 +    if (FLIGHT_MODE(BANK_MODE)) {
-+        // bank mode's yaw is the turn rate of the bank the craft is in, so it is shared out by the measured attitude:
-+        // by the targets, flicking from one hard bank to the other pitched the nose up while the craft rolled through
++        // bank mode's yaw follows the measured bank, so share it out by the measured attitude, not the targets
 +        crossAngle = attitude.raw[axis == FD_ROLL ? FD_PITCH : FD_ROLL] * 0.1f;
 +    }
 +#endif
@@ -179,7 +176,7 @@ index e7f818cb8..499001982 100644
      angleRate += pidRuntime.angleYawSetpoint * sinAngle * earthRefGain;
      pidRuntime.angleTarget[axis] = angleTarget;  // set target for alternate axis to current axis, for use in preceding calculation
  
-@@ -812,7 +829,7 @@ void FAST_CODE pidController(const pidProfile_t *pidProfile, timeUs_t currentTim
+@@ -812,7 +828,7 @@ void FAST_CODE pidController(const pidProfile_t *pidProfile, timeUs_t currentTim
      const bool gpsRescueIsActive = FLIGHT_MODE(GPS_RESCUE_MODE);
      levelMode_e levelMode;
      if (FLIGHT_MODE(ANGLE_MODE) || FLIGHT_MODE(HORIZON_MODE) || gpsRescueIsActive) {
@@ -188,7 +185,7 @@ index e7f818cb8..499001982 100644
              levelMode = LEVEL_MODE_R;
          } else {
              levelMode = LEVEL_MODE_RP;
-@@ -903,10 +920,16 @@ void FAST_CODE pidController(const pidProfile_t *pidProfile, timeUs_t currentTim
+@@ -903,10 +919,16 @@ void FAST_CODE pidController(const pidProfile_t *pidProfile, timeUs_t currentTim
                  // if earth referencing is requested, attenuate yaw axis setpoint when pitched or rolled
                  // and send yawSetpoint to Angle code to modulate pitch and roll
                  // code cost is 107 cycles when earthRef enabled, 20 otherwise, nearly all in cos_approx
