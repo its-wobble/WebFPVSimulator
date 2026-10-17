@@ -246,6 +246,7 @@ void bf_settings_build(void) {
     U16("bank_speed_kp", b->speedKp);
     U16("bank_speed_deadband", b->speedDeadband);
     U16("bank_mid_speed", b->midSpeed);
+    U8("bank_look_turn", b->lookTurn);
   }
 #endif
 

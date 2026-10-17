@@ -10,6 +10,8 @@
  *   npm run bank:log -- --rows 12 14 [N]   every Nth row (default 5) between 12 s and 14 s
  *   npm run bank:log -- --rows 12 14 --replay   the same rows of the replayed flight
  *   npm run bank:log -- --replay           fly the log's sticks through dist/sim-bank.wasm and
+ *   npm run bank:log -- --from 83 ...      start the log (and so the replay, from the ground) at 83 s: after a
+ *                                          crash the page resets the craft, the replay does not
  *                                          summarise that flight the same way, beside the log's
  *
  * READING THE SUMMARY. Each row is half a second while Bank is on. "gyroP"
@@ -85,9 +87,9 @@ function parseLog(text) {
   return lines.slice(1).map((l) => l.split(',').map(Number)).filter((r) => r.length === head.length).map((r) => ({
     t: r[0] / 1e6,
     /* blackbox stick units back to the ABI's: see src/share/flightlog.js */
-    head: at(r, 'rcCommand[0]') / 500,
+    bank: at(r, 'rcCommand[0]') / 500,
     lift: 0.5 + at(r, 'rcCommand[1]') / 1000,
-    bank: at(r, 'rcCommand[2]') / 500,
+    head: at(r, 'rcCommand[2]') / 500,
     speed: (at(r, 'rcCommand[3]') - 1000) / 1000,
     gyroP: at(r, 'gyroADC[1]'),
     active: at(r, 'bank active') ?? 1,
@@ -184,7 +186,7 @@ async function replay(rows) {
       bankOn = r.active >= 0.5;
       must(sim.e.sim_set_bank_mode(bankOn ? 1 : 0), 'sim_set_bank_mode');
     }
-    must(sim.input(t, r.head, -(2 * r.lift - 1), r.bank, r.speed), 'sim_input');
+    must(sim.input(t, r.bank, -(2 * r.lift - 1), r.head, r.speed), 'sim_input');
     must(sim.step(STEP_HZ / RX_HZ), 'sim_step');
     const { state } = sim.readState();
     const n = sim.e.sim_bank_telemetry(telPtr, 32);
@@ -205,9 +207,10 @@ async function replay(rows) {
   return out;
 }
 
-const fileArg = args.find((a, i) => a.endsWith('.csv') && !['--rows'].includes(args[i - 1]));
+const fileArg = args.find((a, i) => a.endsWith('.csv') && !['--rows', '--from'].includes(args[i - 1]));
 const file = fileArg ?? await newestLog();
-const rows = parseLog(await readFile(file, 'utf8'));
+const fromArg = flag('--from') >= 0 ? Number(args[flag('--from') + 1]) : -Infinity;
+const rows = parseLog(await readFile(file, 'utf8')).filter((r) => r.t >= fromArg);
 console.log(`${file}: ${rows.length} rows over ${fmt(rows.at(-1).t - rows[0].t)} s, about ${fmt(rows.length / (rows.at(-1).t - rows[0].t), 0)} rows/s`);
 if (flag('--rows') >= 0) {
   const i = flag('--rows');

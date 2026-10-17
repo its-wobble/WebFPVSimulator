@@ -49,7 +49,7 @@ Sticks in Bank (mode 2):
 | Throttle | Speed. The lower half is a forward speed: bottom is stopped, the centre is `bank_mid_speed` (about 20 m/s on the five inch). Only the bottom third brakes when you are faster than the stick's speed; between a third and the centre the craft coasts down to it. The upper half is a forward force, from what the centre gives to full forward force at the top: the same top speed as at full throttle in acro (about 40 m/s). Braking tilts back no further than `bank_max_brake_angle`. |
 | Yaw | Look around (head check). The nose turns, the direction of travel does not, and it springs back when centred. |
 | Pitch | Lift: the vertical force. Centre is 1 g, which balances the weight, so there is no vertical acceleration: a climb or a sink carries on until you stop it, and the height is not held. Bottom is no lift, top is full thrust as lift. Above the centre the stick is gentle at first and steepens towards the top. |
-| Roll | Bank left or right, which turns the craft. Full stick is as steep as the craft can hold a coordinated turn: about 75 degrees at speed on the five inch, less when slow. |
+| Roll | Bank left or right, which turns the craft. Where the nose points in the turn is `bank_look_turn`: 0 (the default since 2026-10-17) is look dot, along the direction of travel; 100 is look turn, into the turn like a drifting car. The flight controller screen does not offer `bank_*` settings, so change the default in the Betaflight branch's `src/main/pg/bank_mode.c` and run `npm run bank:cycle`. Full stick is as steep as the craft can hold a coordinated turn: about 75 degrees at speed on the five inch, less when slow. |
 
 When the thrust runs out, lift is kept first, then the bank, and the forward speed gives way first. A quarter of the spare thrust is always kept back so the craft can still be steered at the limit. Take off with the lift stick: at the centre the craft only just holds its weight.
 
@@ -71,11 +71,12 @@ npm run bank:log -- path/to/log.csv       # a given log
 npm run bank:log -- --rows 12 14 4        # every 4th row between 12 s and 14 s, every column that matters
 npm run bank:log -- --rows 12 14 4 --replay   # the same rows of the replayed flight
 npm run bank:log -- --replay              # fly the log's sticks through dist/sim-bank.wasm and summarise that too
+npm run bank:log -- --from 83 --replay    # start the log (and the replay, from the ground) at 83 s
 ```
 
 In the summary, `gyroP span dirs` is how far the pitch rate swung and how often it changed direction: a large span is an oscillation or a kick. `pTgt span` is how far the firmware's own pitch target moved in the same half second. A pitch rate that swings while the target stays put (marked `pitch swings, target steady`) is the attitude loop or the plant reacting; one that swings with the target is the firmware commanding it, and the debug columns (speed estimate, thrust trim, thrust to weight) show which estimate moved.
 
-`--replay` flies the logged sticks headless at the five inch's gravity from the ground, switching Bank where the log did, through whatever firmware `dist/sim-bank.wasm` was last built from. It does not follow the logged flight exactly, small differences grow, but it reproduces what those sticks provoke, so a fix can be tried against the flight that showed the problem: edit the firmware, `npm run bank:cycle`, then `npm run bank:log -- FILE --replay` again.
+`--replay` flies the logged sticks headless at the five inch's gravity from the ground, switching Bank where the log did, through whatever firmware `dist/sim-bank.wasm` was last built from. When the craft crashed in the flight, the page reset it and the replay does not, so start the replay after the reset with `--from` (the time the log's altitude came back to 0). It does not follow the logged flight exactly, small differences grow, but it reproduces what those sticks provoke, so a fix can be tried against the flight that showed the problem: edit the firmware, `npm run bank:cycle`, then `npm run bank:log -- FILE --replay` again.
 
 The auto folder is gitignored and lives in the container, so it does not survive a rebuild. Copy a log that matters somewhere safe and note what it showed in PROGRESS.md.
 
