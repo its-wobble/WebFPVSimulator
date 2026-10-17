@@ -5029,6 +5029,9 @@ export async function boot({ loading, bootStart, mapId }) {
    * firmware gives BANK priority over ANGLE, as on a real quad. */
   let bankSwitch = false;
   let bankModeOn = false;
+  /* bank_look_turn for this switch: -1 is the firmware default (B), 100 is
+   * look turn (N), so the two can be flown side by side. */
+  let bankLookTurn = -1;
   const bankAvailable = () => typeof sim.e.sim_set_bank_mode === 'function';
   /* The bank build's telemetry for the flight log: the firmware's targets,
    * collective, learnt thrust to weight and accelerometer. Null on any other
@@ -5293,12 +5296,15 @@ export async function boot({ loading, bootStart, mapId }) {
      * override angle. */
     const wantBank = bankSwitch && bankAvailable() && !crashflipOn && !turtleRecover
       && !(lcAcroUntil === Infinity || (lcAcroUntil > 0 && performance.now() < lcAcroUntil));
+    if (typeof sim.e.sim_set_bank_look_turn === 'function') {
+      sim.e.sim_set_bank_look_turn(bankLookTurn);
+    }
     if (wantBank !== bankModeOn) {
       bankModeOn = wantBank;
       sim.e.sim_set_bank_mode(wantBank ? 1 : 0);
     }
     if (ui.setCraftCaption && !(showcase && showcase.failed) && bankModeOn) {
-      ui.setCraftCaption('Bank. Throttle is speed, roll stick banks, pitch is lift.');
+      ui.setCraftCaption(`Bank${bankLookTurn === 100 ? ', look turn' : ''}. Throttle is speed, roll stick banks, pitch is lift.`);
     } else if (ui.setCraftCaption && !(showcase && showcase.failed)) {
       ui.setCraftCaption(want
         ? 'Angle. Sticks are tilt. Hands off levels.'
@@ -7295,14 +7301,19 @@ export async function boot({ loading, bootStart, mapId }) {
       setDownNearby('x');
       return;
     }
-    /* Bank on or off, the aux switch, bank firmware only. */
-    if (code === 'KeyB' && ui.screen === 'flight' && mode === 'flight' && bankAvailable()) {
-      bankSwitch = !bankSwitch;
+    /* Bank on or off, the aux switch, bank firmware only. B uses the
+     * firmware's bank_look_turn, N sets it to 100 (look turn). Pressing the
+     * other key while in Bank swaps the look without leaving Bank. */
+    if ((code === 'KeyB' || code === 'KeyN') && ui.screen === 'flight' && mode === 'flight' && bankAvailable()) {
+      const look = code === 'KeyN' ? 100 : -1;
+      const key = code === 'KeyN' ? 'N' : 'B';
+      bankSwitch = !(bankSwitch && bankLookTurn === look);
+      bankLookTurn = look;
       syncAngleMode();
       notice = {
         text: bankSwitch
-          ? 'BANK\nThrottle: speed, bottom stops. Roll stick: bank and turn.\nPitch: lift, centre holds 1 g. Yaw: look around.\nB switches back.'
-          : `${angleModeOn ? 'ANGLE' : 'ACRO'}\nBank off.\nB switches back.`,
+          ? `BANK${look === 100 ? ', LOOK TURN' : ''}\nThrottle: speed, bottom stops. Roll stick: bank and turn.\nPitch: lift, centre holds 1 g. Yaw: look around.\n${key} switches back.`
+          : `${angleModeOn ? 'ANGLE' : 'ACRO'}\nBank off.\n${key} switches back.`,
         untilMs: performance.now() + 3600,
       };
       return;

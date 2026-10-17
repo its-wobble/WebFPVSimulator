@@ -430,6 +430,7 @@ void bridge_set_angle_mode(int on);
 #ifdef SIM_BANK_MODE
 /* bf/bf_bank.c, bank build only. */
 void bf_bank_set_switch(int on);
+void bf_bank_set_look_turn(int percent);
 int bf_bank_telemetry(double *out, int n);
 #endif
 

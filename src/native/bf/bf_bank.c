@@ -92,6 +92,10 @@ void performAcclerationCalibration(rollAndPitchTrims_t *t) { UNUSED(t); }
 void performInflightAccelerationCalibration(rollAndPitchTrims_t *t) { UNUSED(t); }
 
 static int g_bank_switch = 0;
+/* bank_look_turn from the shell's N key, -1 for the firmware default. The
+ * flight controller screen has no bank_* rows, so this stands in for the CLI
+ * setting. */
+static int g_look_turn = -1;
 static unsigned int g_acc_seed;
 static uint32_t g_acc_due_us;
 
@@ -158,12 +162,20 @@ void bf_bank_init(void) {
 
 void bf_bank_set_switch(int on) { g_bank_switch = on ? 1 : 0; }
 int bf_bank_switch(void) { return g_bank_switch; }
+void bf_bank_set_look_turn(int percent) { g_look_turn = percent < 0 ? -1 : (percent > 100 ? 100 : percent); }
 
 /* Mode flags: before attitude is fed and before the PID, every step. */
 bool bf_bank_mode_flags(void) {
   /* fc/core.c processRxModes, the BANK part. Fixed wing, 3D, GPS rescue,
    * altitude and position hold do not exist in this build. */
   const bool requested = g_bank_switch && sensors(SENSOR_ACC) && !failsafeIsActive();
+  /* Every step, because bf_config_begin restores the defaults on a reset. */
+  {
+    extern const bankModeConfig_t pgResetTemplate_bankModeConfig;
+    bankModeConfigMutable()->lookTurn = g_look_turn < 0
+      ? pgResetTemplate_bankModeConfig.lookTurn
+      : (uint8_t)g_look_turn;
+  }
   if (requested) {
     /* BANK is built on ANGLE, as core.c sets it. */
     flightModeFlags |= BANK_MODE | ANGLE_MODE;

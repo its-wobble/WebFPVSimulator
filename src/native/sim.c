@@ -1464,6 +1464,12 @@ SIM_EXPORT int sim_set_bank_mode(int on) {
   return SIM_OK;
 }
 
+/* bank_look_turn 0..100, or -1 for the firmware default. */
+SIM_EXPORT int sim_set_bank_look_turn(int percent) {
+  bf_bank_set_look_turn(percent);
+  return SIM_OK;
+}
+
 /* Bank mode telemetry, see bf_bank_telemetry for the layout. Returns the
  * count written, or SIM_ERR_BAD_ARG if out is null or too short. */
 SIM_EXPORT int sim_bank_telemetry(double *out, int n) {

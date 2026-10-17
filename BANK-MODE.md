@@ -40,7 +40,7 @@ npm run serve
 
 1. Open **http://localhost:8000/** in your own browser (VS Code forwards port 8000). Once `dist/sim-bank.wasm` exists, `npm run serve` redirects a plain visit to `?fw=bank`, so the bank firmware loads by default. For the stock firmware open `/?fw=normal`, or start the server with `SIM_FW=normal npm run serve`.
 2. Start a flight.
-3. Press **B** to turn Bank on. A banner explains the sticks and the on-screen mode indicator reads **Bank**. Press **B** again to go back to Acro or Angle.
+3. Press **B** to turn Bank on. A banner explains the sticks and the on-screen mode indicator reads **Bank**. Press **B** again to go back to Acro or Angle. **N** does the same with `bank_look_turn` at 100 (look turn) whatever the firmware default, so look dot and look turn can be flown side by side. Pressing the other key while in Bank swaps the look without leaving Bank.
 
 Sticks in Bank (mode 2):
 
