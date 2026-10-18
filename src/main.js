@@ -5304,7 +5304,7 @@ export async function boot({ loading, bootStart, mapId }) {
       sim.e.sim_set_bank_mode(wantBank ? 1 : 0);
     }
     if (ui.setCraftCaption && !(showcase && showcase.failed) && bankModeOn) {
-      ui.setCraftCaption(`Bank${bankLookTurn === 100 ? ', look turn' : ''}. Throttle is speed, roll stick banks, pitch is lift.`);
+      ui.setCraftCaption(`Bank${bankLookTurn === 100 ? ', look turn' : ''}. Throttle is speed, yaw stick banks, pitch is lift.`);
     } else if (ui.setCraftCaption && !(showcase && showcase.failed)) {
       ui.setCraftCaption(want
         ? 'Angle. Sticks are tilt. Hands off levels.'
@@ -7312,7 +7312,7 @@ export async function boot({ loading, bootStart, mapId }) {
       syncAngleMode();
       notice = {
         text: bankSwitch
-          ? `BANK${look === 100 ? ', LOOK TURN' : ''}\nThrottle: speed, bottom stops. Roll stick: bank and turn.\nPitch: lift, centre holds 1 g. Yaw: look around.\n${key} switches back.`
+          ? `BANK${look === 100 ? ', LOOK TURN' : ''}\nThrottle: speed, bottom stops. Yaw stick: bank and turn.\nPitch: lift, centre holds 1 g. Roll: look around.\n${key} switches back.`
           : `${angleModeOn ? 'ANGLE' : 'ACRO'}\nBank off.\n${key} switches back.`,
         untilMs: performance.now() + 3600,
       };

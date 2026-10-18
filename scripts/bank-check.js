@@ -55,11 +55,11 @@ const defaultDiff = await readFile(join(root, 'configs/betaflight-default.diff')
 const thresholds = JSON.parse(await readFile(join(root, 'tests/bank-thresholds.json'), 'utf8'));
 
 /* Bank stick intent to the ABI's channels. speed 0..1 (throttle), bank -1..1
- * (roll stick, + right), lift 0..1 (pitch stick, 0.5 centre = 1 g, 1 = stick
- * fully forward), head -1..1 (yaw stick, + right). The ABI's pitch channel
+ * (yaw stick, + right), lift 0..1 (pitch stick, 0.5 centre = 1 g, 1 = stick
+ * fully forward), head -1..1 (roll stick, + right). The ABI's pitch channel
  * is + nose up, which is stick BACK, hence the sign. */
 function channels({ speed = 0, bank = 0, lift = 0.5, head = 0 }) {
-  return { roll: bank, pitch: -(2 * lift - 1), yaw: head, throttle: speed };
+  return { roll: head, pitch: -(2 * lift - 1), yaw: bank, throttle: speed };
 }
 
 /* Plant truth helpers. State: t, pos3, vel3, quat(wxyz)4, omega3, ... */

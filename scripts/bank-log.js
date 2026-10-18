@@ -86,10 +86,12 @@ function parseLog(text) {
   const at = (r, name) => (col(name) >= 0 ? r[col(name)] : undefined);
   return lines.slice(1).map((l) => l.split(',').map(Number)).filter((r) => r.length === head.length).map((r) => ({
     t: r[0] / 1e6,
-    /* blackbox stick units back to the ABI's: see src/share/flightlog.js */
-    bank: at(r, 'rcCommand[0]') / 500,
+    /* blackbox stick units back to the ABI's: see src/share/flightlog.js.
+     * Bank is the yaw stick and the head check the roll stick; logs from
+     * before 2026-10-18 banked on the roll stick, so read them swapped. */
+    bank: at(r, 'rcCommand[2]') / 500,
     lift: 0.5 + at(r, 'rcCommand[1]') / 1000,
-    head: at(r, 'rcCommand[2]') / 500,
+    head: at(r, 'rcCommand[0]') / 500,
     speed: (at(r, 'rcCommand[3]') - 1000) / 1000,
     gyroP: at(r, 'gyroADC[1]'),
     active: at(r, 'bank active') ?? 1,
@@ -186,7 +188,7 @@ async function replay(rows) {
       bankOn = r.active >= 0.5;
       must(sim.e.sim_set_bank_mode(bankOn ? 1 : 0), 'sim_set_bank_mode');
     }
-    must(sim.input(t, r.bank, -(2 * r.lift - 1), r.head, r.speed), 'sim_input');
+    must(sim.input(t, r.head, -(2 * r.lift - 1), r.bank, r.speed), 'sim_input');
     must(sim.step(STEP_HZ / RX_HZ), 'sim_step');
     const { state } = sim.readState();
     const n = sim.e.sim_bank_telemetry(telPtr, 32);

@@ -42,14 +42,14 @@ npm run serve
 2. Start a flight.
 3. Press **B** to turn Bank on. A banner explains the sticks and the on-screen mode indicator reads **Bank**. Press **B** again to go back to Acro or Angle. **N** does the same with `bank_look_turn` at 100 (look turn) whatever the firmware default, so look dot and look turn can be flown side by side. Pressing the other key while in Bank swaps the look without leaving Bank.
 
-Sticks in Bank (mode 2):
+Sticks in Bank (mode 2). Bank moved from the roll stick to the yaw stick on 2026-10-18; `bank:log` reads and replays a log from before then with its Bank and head check swapped.
 
 | Stick | Does |
 |---|---|
 | Throttle | Speed. The lower half is a forward speed: bottom is stopped, the centre is `bank_mid_speed` (about 20 m/s on the five inch). Only the bottom third brakes when you are faster than the stick's speed; between a third and the centre the craft coasts down to it. The upper half is a forward force, from what the centre gives to full forward force at the top: the same top speed as at full throttle in acro (about 40 m/s). Braking tilts back no further than 30 degrees, and in a full bank not at all (Bank before Speed). |
-| Yaw | Look around (head check). The nose turns, the direction of travel does not, and it springs back when centred. |
+| Yaw | Bank left or right, which turns the craft. Where the nose points in the turn is `bank_look_turn`: 0 (the default since 2026-10-17) is look dot, along the direction of travel; 100 is look turn, into the turn like a drifting car. The flight controller screen does not offer `bank_*` settings, so change the default in the Betaflight branch's `src/main/pg/bank_mode.c` and run `npm run bank:cycle`. Full stick is as steep as the craft can hold a coordinated turn: about 75 degrees at speed on the five inch, less when slow. |
+| Roll | Look around (head check). The nose turns, the direction of travel does not, and it springs back when centred. |
 | Pitch | Lift: the vertical force. Centre is 1 g, which balances the weight, so there is no vertical acceleration: a climb or a sink carries on until you stop it, and the height is not held. Bottom is no lift, top is full thrust as lift. Above the centre the stick is gentle at first and steepens towards the top. |
-| Roll | Bank left or right, which turns the craft. Where the nose points in the turn is `bank_look_turn`: 0 (the default since 2026-10-17) is look dot, along the direction of travel; 100 is look turn, into the turn like a drifting car. The flight controller screen does not offer `bank_*` settings, so change the default in the Betaflight branch's `src/main/pg/bank_mode.c` and run `npm run bank:cycle`. Full stick is as steep as the craft can hold a coordinated turn: about 75 degrees at speed on the five inch, less when slow. |
 
 When the thrust runs out, lift is kept first, then the bank, and the forward speed gives way first. A quarter of the spare thrust is always kept back so the craft can still be steered at the limit. Take off with the lift stick: at the centre the craft only just holds its weight.
 
