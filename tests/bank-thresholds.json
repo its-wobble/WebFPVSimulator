@@ -12,7 +12,14 @@
   "headcheck_nose_offset_deg":   { "min": -100,  "max": -80,  "why": "full right roll stick yaws the nose head_check_range (90 deg) clockwise of the track" },
   "headcheck_track_change_deg":  { "min": -10,   "max": 10,   "why": "head check must not change the direction of travel" },
   "headreturn_nose_offset_deg":  { "min": -5,    "max": 5,    "why": "head check springs back to neutral when the stick centres" },
-  "brake_final_speed":           { "min": 0,     "max": 0.5,  "why": "speed stick to the bottom brakes to a stop" },
+  "brake_final_speed":           { "min": 0,     "max": 0.5,  "why": "speed stick to the stop (min_check) brakes to a stop" },
+  "reverse_speed_mps":           { "min": -3.5,  "max": -1,   "why": "below min_check a small reverse: 10 % of bank_mid_speed (0.05 g of drag, about 2 m/s on the five inch), backwards along the nose" },
+  "reverse_vertical_accel":      { "min": -0.3,  "max": 0.3,  "why": "tilting back to reverse keeps Lift, as any tilt does" },
+  "reverse_nose_turn_deg":       { "min": -10,   "max": 10,   "why": "backing off a wall with no Bank keeps the nose where it was" },
+  "reverse_max_tilt_deg":        { "min": 0,     "max": 30,   "why": "a small reverse, within the 30 deg brake angle" },
+  "reversestop_final_speed":     { "min": 0,     "max": 0.5,  "why": "back to the stop band (10 % of the stick above min_check) stops the reverse and holds no speed" },
+  "brakereverse_final_speed_mps": { "min": -3.5, "max": -1,   "why": "the bottom of the stick from the cruise brakes, then carries on into the small reverse" },
+  "brakereverse_settled_pitch_span_deg": { "min": 0, "max": 5, "why": "a steady reverse: no pitch hunting across the forward to backward flip of the speed estimate" },
   "mode_off_cleared":            { "min": 0,     "max": 0,    "why": "switching bank off clears the mode" },
   "determinism_same_hash":       { "min": 1,     "max": 1,    "why": "same inputs give a bit identical trace" }
 }

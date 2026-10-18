@@ -54,6 +54,12 @@ const wasm = await readFile(join(root, 'dist/sim-bank.wasm')).catch(() => {
 const defaultDiff = await readFile(join(root, 'configs/betaflight-default.diff'), 'utf8');
 const thresholds = JSON.parse(await readFile(join(root, 'tests/bank-thresholds.json'), 'utf8'));
 
+/* The Speed stick's stop: the raw throttle at min_check (1050), where the
+ * reverse zone below it starts. */
+const SPEED_STOP = 0.05;
+/* The middle of the stop band above it (10 % of the stick above min_check). */
+const SPEED_STOP_BAND = 0.1;
+
 /* Bank stick intent to the ABI's channels. speed 0..1 (throttle), bank -1..1
  * (yaw stick, + right), lift 0..1 (pitch stick, 0.5 centre = 1 g, 1 = stick
  * fully forward), head -1..1 (roll stick, + right). The ABI's pitch channel
@@ -170,9 +176,20 @@ async function sortie() {
   f.fly(2.0, 'headcheck');
   f.sticks({ speed: 0.5, lift: 0.5 });
   f.fly(2.0, 'headreturn');
-  f.sticks({ speed: 0, lift: 0.5 });
+  f.sticks({ speed: SPEED_STOP, lift: 0.5 });
   f.fly(6.0, 'brake');
+  /* Below the stop is a small reverse, open now the stick has been raised
+   * since arming (the hover above flew the bottom of the stick locked). */
   f.sticks({ speed: 0, lift: 0.5 });
+  f.fly(5.0, 'reverse');
+  f.sticks({ speed: SPEED_STOP_BAND, lift: 0.5 });
+  f.fly(4.0, 'reversestop');
+  /* From the cruise straight to the bottom: the brake carries on into reverse. */
+  f.sticks({ speed: 0.5, lift: 0.5 });
+  f.fly(8.0, 'recruise');
+  f.sticks({ speed: 0, lift: 0.5 });
+  f.fly(6.0, 'brakereverse');
+  f.sticks({ speed: SPEED_STOP, lift: 0.5 });
   f.bank(false);
   f.fly(1.0, 'off');
   return f;
@@ -192,6 +209,8 @@ function vertAccel(w) {
   return num / den;
 }
 const noseOffset = (x) => wrap((x.yaw - x.track) / DEG) * DEG;
+/* Horizontal velocity along the nose, m/s, negative backwards. */
+const alongNose = (x) => x.vel[0] * Math.cos(x.yaw / DEG) + x.vel[1] * Math.sin(x.yaw / DEG);
 const rate = (w, key) => (wrap((w.at(-1)[key] - w[0][key]) / DEG) * DEG) / (w.at(-1).t - w[0].t);
 
 /* Every measurement is named for what the spec in the Betaflight repo's
@@ -226,6 +245,18 @@ function measure(f) {
   m.brake_time_to_half_mps = stopped ? stopped.t - brake[0].t : 99;
   m.brake_final_speed = brake.at(-1).speedH;
   m.thrust_to_weight = f.window('brake').at(-1).tw;
+  const reverse = f.window('reverse', 2);
+  m.reverse_speed_mps = mean(reverse.map(alongNose));
+  m.reverse_vertical_accel = vertAccel(reverse);
+  const revAll = f.window('reverse');
+  m.reverse_nose_turn_deg = wrap((revAll.at(-1).yaw - revAll[0].yaw) / DEG) * DEG;
+  m.reverse_max_tilt_deg = Math.max(...revAll.map((x) => Math.hypot(x.roll, x.pitch)));
+  m.reversestop_final_speed = f.window('reversestop').at(-1).speedH;
+  const brakeRev = f.window('brakereverse');
+  const brStopped = brakeRev.find((x) => x.speedH < 0.5);
+  m.brakereverse_time_to_half_mps = brStopped ? brStopped.t - brakeRev[0].t : 99;
+  m.brakereverse_final_speed_mps = mean(f.window('brakereverse', 1).map(alongNose));
+  m.brakereverse_settled_pitch_span_deg = span(f.window('brakereverse', 2).map((x) => x.pitch));
   m.mode_off_cleared = f.window('off').at(-1).active;
   return m;
 }
