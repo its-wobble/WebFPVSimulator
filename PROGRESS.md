@@ -70708,3 +70708,17 @@ Latency: a static asset with no per-frame work, plus 58 KB of bytes at load for 
 - `bank:check` 22 of 23 as before, `turn_ball_g` -0.138 (-0.127 before). Betaflight `make test`, `make checks`, SITL and STM32F405 builds pass. vendor clean.
 - Learnt about the tooling: replays of whole logs from the ground diverge in height within seconds (232749 hits the ground at 5 s in every build), and even 10 s segments from a scripted cruise are chaotic (a 1 degree `bank_head_check_range` change moves yaw saturation 1.5 to 8.9 %). Read them for gross failures only, and compare builds over several imperceptibly perturbed runs.
 - Not run: `npm run verify`, browser lints, `shots.js`. Nobody has flown it.
+
+## 2026-10-18 | bank | No thrust trim, on trial: the props' inflow damps vertical speed
+
+- Ask: the owner asked to drop the firmware's thrust trim and fly on the fixed `bank_thrust_to_weight` (5.70, kept: the owner's hovers need collective 0.3145, 5.66 to 5.70 with `collective^1.5`; the plant's full-throttle figure at 1.62 g is 5.20), so the props' own response to a vertical speed damps altitude changes at centre Lift. Numbers are in the Betaflight branch's project_plan.md ("No thrust trim").
+- Simulator: no code change. `DEBUG_BANK` 2 (the trim) is 0 from this build on. BANK-MODE.md says so, and `bank:log` keeps its `trim` column for older logs.
+- Measured (scratch harness, five inch at 1.62 g, from the ground):
+  - Take-off at centre Lift levels off within 6 s at 5 m (before: 2.67 m/s climb forever).
+  - A Lift pulse's 7.9 m/s climb decays to 0.33 m/s in 4 s (before: 10.35 m/s, no decay).
+  - 0.5 Speed at centre Lift sinks at 1.3 m/s; 0.75 and full Speed dive at 12 to 14 m/s and hit the ground from 55 m. Holding level needs Lift about 0.78 and 0.85.
+  - Braking from 0.5 Speed balloons from -1.3 to +1.7 m/s.
+- `bank:check` 21 of 23: `cruise_speed_variation` 2.27 now fails (the sortie's cruise sinks onto the ground from its 5 m hover), and `turn_ball_g` -0.138 still fails. Replay of `webfpv-bank-20261018-171544.csv`: it sinks to the ground in the first fast run and then sits on it through the owner's low hovering, where the flight held 1 to 2 m.
+- Betaflight `make test_bank_unittest`, `make checks` and SITL pass. vendor clean. Not run: `npm run verify`, browser lints. Nobody has flown it.
+- Follow-up the same day: a fixed inflow thrust curve, `1 − 0.8 × inflow` (floor 0.3), fitted to the old trim in the owner's 2026-10-18 logs. It takes the thrust lost in fast flight back without measuring the vertical force. `DEBUG_BANK` 2 is now the thrust share (BANK-MODE.md). `bank:check` back to 22 of 23 (cruise 20.1 m/s). Damping as with no trim; 0.5 Speed climbs 1.15 m/s and 0.75 sinks 1.0 at centre Lift; full Speed holds height but bobs at about 0.5 Hz (vz ±1.5 m/s). The levelled speed estimate rises as the pitch falls above 45 degrees, which feeds back through the share and the tilt budget. A 0.3 Hz inflow filter stops the bob but costs 5 to 15 m on a punch, so it was not kept. The replay of 171544 diverges at 3 s (lower take-off, then the owner's Lift dive hits the ground).
+- Parked the same day at the owner's request (more complexity than wanted for now): firmware back to 2a8a2a7e6 (Lift a force, measuring trim), BANK-MODE.md restored, `dist/sim-bank.wasm` byte identical to the pre-trial build. Patches, builds, harness and results in `/workspaces/betaflight/.bank-snapshots/2026-10-18-inflow-curve/`.
