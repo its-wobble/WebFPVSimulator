@@ -234,9 +234,9 @@ void bf_settings_build(void) {
   {
     bankModeConfig_t *b = bankModeConfigMutable();
     U16("bank_thrust_to_weight", b->thrustToWeight);
-    U8("bank_head_check_range", b->headCheckRange);
     U16("bank_mid_speed", b->midSpeed);
-    U8("bank_look_turn", b->lookTurn);
+    U16("bank_drag_rate", b->dragRate);
+    U16("bank_corner_rate", b->cornerRate);
   }
 #endif
 

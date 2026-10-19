@@ -29,7 +29,7 @@
  * MODE SELECTION. On hardware BOXBANK is an aux switch and processRxModes()
  * in fc/core.c sets BANK_MODE. This build has no aux channels and does not
  * compile core.c, so bf_bank_step() is the stand in for that slice of it,
- * with core.c's preconditions and its rule that BANK overrides ANGLE.
+ * with core.c's preconditions and its rule that BANK replaces ANGLE.
  *
  * This file is part of WebFPVSimulator.
  *
@@ -92,10 +92,9 @@ void performAcclerationCalibration(rollAndPitchTrims_t *t) { UNUSED(t); }
 void performInflightAccelerationCalibration(rollAndPitchTrims_t *t) { UNUSED(t); }
 
 static int g_bank_switch = 0;
-/* bank_look_turn from the shell's N key, -1 for the firmware default. The
- * flight controller screen has no bank_* rows, so this stands in for the CLI
- * setting. */
-static int g_look_turn = -1;
+/* The shell's N key set bank_look_turn. The race rewrite of the mode has no
+ * look into the turn yet (a to-do in the Betaflight repo's project_plan.md),
+ * so the key is kept and does nothing. */
 static unsigned int g_acc_seed;
 static uint32_t g_acc_due_us;
 
@@ -162,24 +161,18 @@ void bf_bank_init(void) {
 
 void bf_bank_set_switch(int on) { g_bank_switch = on ? 1 : 0; }
 int bf_bank_switch(void) { return g_bank_switch; }
-void bf_bank_set_look_turn(int percent) { g_look_turn = percent < 0 ? -1 : (percent > 100 ? 100 : percent); }
+void bf_bank_set_look_turn(int percent) { UNUSED(percent); }
 
 /* Mode flags: before attitude is fed and before the PID, every step. */
 bool bf_bank_mode_flags(void) {
   /* fc/core.c processRxModes, the BANK part. Fixed wing, 3D, GPS rescue,
    * altitude and position hold do not exist in this build. */
   const bool requested = g_bank_switch && sensors(SENSOR_ACC) && !failsafeIsActive();
-  /* Every step, because bf_config_begin restores the defaults on a reset. */
-  {
-    extern const bankModeConfig_t pgResetTemplate_bankModeConfig;
-    bankModeConfigMutable()->lookTurn = g_look_turn < 0
-      ? pgResetTemplate_bankModeConfig.lookTurn
-      : (uint8_t)g_look_turn;
-  }
   if (requested) {
-    /* BANK is built on ANGLE, as core.c sets it. */
-    flightModeFlags |= BANK_MODE | ANGLE_MODE;
-    flightModeFlags &= (uint16_t)~HORIZON_MODE;
+    /* BANK sets all three rates itself and takes ANGLE's and HORIZON's
+     * place, as core.c does. */
+    flightModeFlags |= BANK_MODE;
+    flightModeFlags &= (uint16_t)~(ANGLE_MODE | HORIZON_MODE);
   } else {
     flightModeFlags &= (uint16_t)~BANK_MODE;
   }
@@ -206,7 +199,7 @@ void bf_bank_rx_frame(timeUs_t now_us) {
 /*
  * Telemetry for the checks and the OSD. These are the firmware's own outputs
  * and inputs, everything a blackbox log of the mode would show:
- *  0 active, 1 roll target deg, 2 pitch target deg, 3 yaw rate dps,
+ *  0 active, 1 roll target deg, 2 pitch target deg, 3 body yaw rate dps,
  *  4 collective 0..1, 5 thrust to weight in use, 6..8 filtered acc g (x y z),
  *  9..16 debug[0..7] of DEBUG_BANK, scaled as bank_mode.c documents them.
  */
@@ -218,7 +211,7 @@ int bf_bank_telemetry(double *out, int n) {
   out[0] = bankModeIsActive() ? 1.0 : 0.0;
   out[1] = bankModeGetAngleTarget(FD_ROLL);
   out[2] = bankModeGetAngleTarget(FD_PITCH);
-  out[3] = bankModeGetYawRate();
+  out[3] = bankModeGetRate(FD_YAW);
   out[4] = bankModeGetCollective();
   out[5] = bankModeGetThrustToWeight();
   out[6] = acc.accADC[X] * acc.dev.acc_1G_rec;

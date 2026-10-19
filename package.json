@@ -15,6 +15,7 @@
     "build:wasm:bank": "BANK=1 node scripts/run-bash.js scripts/build-wasm.sh",
     "check:bank": "node scripts/bank-check.js",
     "bank:log": "node scripts/bank-log.js",
+    "bank:bench": "node scripts/bank-bench.js",
     "bank:cycle": "bash scripts/bank-cycle.sh",
     "gen:baseline": "node tests/gen/gen-baseline.js",
     "serve": "node scripts/serve.js",

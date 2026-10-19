@@ -131,7 +131,7 @@ async function newFlight() {
           roll: e.roll * DEG, pitch: e.pitch * DEG, yaw: e.yaw * DEG,
           speedH: Math.hypot(v[0], v[1]), track: Math.atan2(v[1], v[0]) * DEG,
           active: tel[0], rollTgt: tel[1], pitchTgt: tel[2], yawRateCmd: tel[3],
-          collective: tel[4], tw: tel[5], acc: tel.slice(6, 9),
+          collective: tel[4], tw: tel[5], acc: tel.slice(6, 9), dbg: tel.slice(9, 17),
         });
         hash.push(...state.slice(0, 14));
       }
@@ -150,7 +150,7 @@ async function newFlight() {
 const mean = (a) => a.reduce((s, x) => s + x, 0) / Math.max(1, a.length);
 const span = (a) => Math.max(...a) - Math.min(...a);
 
-/* The standard sortie: engage, settle, cruise, turn, head check, brake. Every
+/* The standard sortie: engage, settle, cruise, turn, brake, reverse. Every
  * scenario reads its own labelled window, so one flight serves them all. */
 async function sortie() {
   const f = await newFlight();
@@ -172,10 +172,6 @@ async function sortie() {
   f.fly(6.0, 'turn');
   f.sticks({ speed: 0.5, lift: 0.5 });
   f.fly(3.0, 'unturn');
-  f.sticks({ speed: 0.5, lift: 0.5, head: 1.0 });
-  f.fly(2.0, 'headcheck');
-  f.sticks({ speed: 0.5, lift: 0.5 });
-  f.fly(2.0, 'headreturn');
   f.sticks({ speed: SPEED_STOP, lift: 0.5 });
   f.fly(6.0, 'brake');
   /* Below the stop is a small reverse, open now the stick has been raised
@@ -230,16 +226,11 @@ function measure(f) {
   const turn = f.window('turn', 3);
   m.turn_roll_deg = mean(turn.map((x) => x.roll));
   m.turn_roll_tracking_deg = Math.max(...turn.map((x) => Math.abs(x.roll - x.rollTgt)));
-  m.turn_ball_g = mean(turn.map((x) => x.acc[1]));
   m.turn_heading_rate_dps = rate(turn, 'yaw');
   m.turn_track_rate_dps = rate(turn, 'track');
   m.turn_coordination_dps = Math.abs(m.turn_heading_rate_dps - m.turn_track_rate_dps);
   m.turn_slip_deg = mean(turn.map(noseOffset));
   m.turn_vertical_accel = vertAccel(turn);
-  m.headcheck_nose_offset_deg = mean(f.window('headcheck', 1).map(noseOffset));
-  const hcAll = f.window('headcheck');
-  m.headcheck_track_change_deg = wrap((hcAll.at(-1).track - hcAll[0].track) / DEG) * DEG;
-  m.headreturn_nose_offset_deg = mean(f.window('headreturn', 0.5).map(noseOffset));
   const brake = f.window('brake');
   const stopped = brake.find((x) => x.speedH < 0.5);
   m.brake_time_to_half_mps = stopped ? stopped.t - brake[0].t : 99;
@@ -267,7 +258,7 @@ if (EXPLORE) {
     console.log([s.label.padEnd(10), s.t.toFixed(2), `spd ${s.speedH.toFixed(2)}`, `vz ${s.vel[2].toFixed(2)}`,
       `r ${s.roll.toFixed(1)}/${s.rollTgt.toFixed(1)}`, `p ${s.pitch.toFixed(1)}/${s.pitchTgt.toFixed(1)}`,
       `yaw ${s.yaw.toFixed(0)} trk ${s.track.toFixed(0)}`, `coll ${s.collective.toFixed(3)}`, `tw ${s.tw.toFixed(2)}`,
-      `acc ${s.acc.map((a) => a.toFixed(2)).join(',')}`].join('  '));
+      `acc ${s.acc.map((a) => a.toFixed(2)).join(',')}`, `dbg ${s.dbg.map((a) => a.toFixed(0)).join(',')}`].join('  '));
   }
 }
 const m = measure(f1);

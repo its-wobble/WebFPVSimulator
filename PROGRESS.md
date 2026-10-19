@@ -70722,3 +70722,23 @@ Latency: a static asset with no per-frame work, plus 58 KB of bytes at load for 
 - Betaflight `make test_bank_unittest`, `make checks` and SITL pass. vendor clean. Not run: `npm run verify`, browser lints. Nobody has flown it.
 - Follow-up the same day: a fixed inflow thrust curve, `1 − 0.8 × inflow` (floor 0.3), fitted to the old trim in the owner's 2026-10-18 logs. It takes the thrust lost in fast flight back without measuring the vertical force. `DEBUG_BANK` 2 is now the thrust share (BANK-MODE.md). `bank:check` back to 22 of 23 (cruise 20.1 m/s). Damping as with no trim; 0.5 Speed climbs 1.15 m/s and 0.75 sinks 1.0 at centre Lift; full Speed holds height but bobs at about 0.5 Hz (vz ±1.5 m/s). The levelled speed estimate rises as the pitch falls above 45 degrees, which feeds back through the share and the tilt budget. A 0.3 Hz inflow filter stops the bob but costs 5 to 15 m on a punch, so it was not kept. The replay of 171544 diverges at 3 s (lower take-off, then the owner's Lift dive hits the ground).
 - Parked the same day at the owner's request (more complexity than wanted for now): firmware back to 2a8a2a7e6 (Lift a force, measuring trim), BANK-MODE.md restored, `dist/sim-bank.wasm` byte identical to the pre-trial build. Patches, builds, harness and results in `/workspaces/betaflight/.bank-snapshots/2026-10-18-inflow-curve/`.
+
+## 2026-10-19 | bank | Race rewrite on branch `bank-race-rewrite` (both repos)
+
+- Ask: the owner wants bank mode to match perfect acro in straight-line speed, punch and turn tightness, rebuilt from scratch on an experimental branch. Design and owner decisions: the Betaflight repo's `project_plan.md`, "Race rewrite".
+- Simulator changes, all under `BANK=1` / `SIM_BANK_MODE`, default `dist/sim.wasm` untouched:
+  - `patches/bank/0001-bank-mode-hooks.patch`: no pid.c hooks any more; rc.c takes all three rates from `bankModeGetRate(axis)`. `hooks.lock` accepted after porting.
+  - `bf_bank.c`: BANK clears ANGLE and HORIZON instead of setting ANGLE; the N key's look turn is a no-op; telemetry 3 is the body yaw rate setpoint. `bf_glue.c` no longer takes ANGLE down after BANK, since BANK never sets it. `bf_settings.c`: `bank_drag_rate` and `bank_corner_rate` replace `bank_head_check_range` and `bank_look_turn`.
+  - `scripts/bank-check.js`: head check segments and rows dropped, `turn_ball_g` replaced by `turn_slip_deg` (band ±10, from the rewrite's spec), samples carry `DEBUG_BANK` and `--explore` prints it. `tests/bank-thresholds.json` changed to match: this is a spec change on the owner's request, not a band moved to make a row pass.
+  - New `scripts/bank-bench.js` (`npm run bank:bench`): bank mode against an ideal acro pilot, which reads the plant's true state and flies linear rates through a quaternion attitude loop.
+- Measured, five inch at 1.62 g:
+  - `bank:bench`: top speed 38.2 vs 36.4 m/s (105 %); punch 17.2 vs 17.7 m in 1 s (97 %); 180 degree reversal from 20 m/s in 0.78 vs 0.86 s (111 %) and 6.9 vs 9.0 m wide (131 %), height held.
+  - The previous mode on the same bench: reversal 1.95 s, 23 m wide, 12 m of height lost.
+  - `bank:check`: all banded rows pass; `turn_slip_deg` 6.9 (the slip estimate reads about 1 degree: an estimator bias, open point).
+- What the first builds got wrong, kept for the reasoning:
+  - Euler angle targets through pidLevel overshot past 90 degrees in a full-Bank roll-in and swung the pitch target ±80 degrees; flying on rates (the mode turns the thrust axis itself) fixed it.
+  - The trim measured from vertical force stopped at 75 degrees of tilt and the craft sank at full Speed; measured along the thrust axis it holds at any tilt, but at 37 m/s the props give under a fifth of the modelled thrust (floor lowered to 0.05).
+  - A force budget following the fast trim limit-cycled at top speed; at 1 Hz it doesn't.
+  - Lift giving way fully at 85 degrees spiral-dived at 7 m/s in an airborne replay of the owner's 2026-10-19 sticks; capped at a fifth.
+- `bank:log --replay` from the ground is not representative of `webfpv-bank-20261019-113118.csv` (its bank segment started in the air after acro). An airborne replay (scratch script: take off to 20 m, then the log's bank sticks from 31 s) flew without incident.
+- Betaflight: `make test` (all), `make checks`, SITL and `CONFIG=BETAFPVG473_V2 OPTIONS=USE_BANK_MODE` pass. vendor clean. Not run: `npm run verify`, browser lints. Nobody has flown it.

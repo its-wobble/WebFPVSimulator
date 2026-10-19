@@ -13,7 +13,7 @@ The sim compiles a pinned Betaflight 4.5.1 (`vendor/betaflight`). The bank mode 
 |---|---|---|
 | `flight/bank_mode.[ch]`, `pg/bank_mode.[ch]` | copied from the BF working tree into `build/bank/` by `scripts/bank-sync.sh` | nobody, automatic (uncommitted edits included) |
 | master vs 4.5.1 API differences inside those files | `patches/bank/compat.sed` (sed over the staged copy), `-DRP_AXIS_COUNT=2` in `build-wasm.sh` | you, when the build breaks on a missing API |
-| hooks into rc.c, pid.c, mixer.c, rc_modes.h, runtime_config.h, pg_ids.h | `patches/bank/0001-bank-mode-hooks.patch`, hand ported to 4.5.1 | you, when `bank:sync` reports DRIFT |
+| hooks into rc.c, mixer.c, rc_modes.h, runtime_config.h, pg_ids.h (and pid.c on `banked-mode-init`; the `bank-race-rewrite` mode flies on rates and has none there) | `patches/bank/0001-bank-mode-hooks.patch`, hand ported to 4.5.1 | you, when `bank:sync` reports DRIFT |
 | core.c's part (BOXBANK switch, `bankModeUpdate()` per RC frame) | `src/native/bf/bf_bank.c` (core.c is not compiled here) | you, when the branch changes how core.c drives the mode |
 | `bank_*` CLI settings | `src/native/bf/bf_settings.c` under `SIM_BANK_MODE` | you, when `bankModeConfig_t` fields change (compile error tells you) |
 | accelerometer | `sim.c` measures specific force; `bf_bank.c` turns it into ICM-42688 counts for BF's own `acceleration.c` | rarely |
@@ -27,7 +27,7 @@ cd /workspaces/betaflight && make test_bank_unittest      # firmware unit tests 
 cd /home/devpod/WebFPVSimulator && npm run bank:cycle      # sync, build sim-bank.wasm, vendor clean check, fly
 ```
 
-`bank:cycle` exits non-zero on the first problem and says what it was. `npm run check:bank -- --explore` prints the time series of the sortie, which is how to see *why* a row failed. The report is in `build/bank/report.json`.
+`bank:cycle` exits non-zero on the first problem and says what it was. `npm run bank:bench` (informational, no bands) flies top speed, punch and a 180 degree reversal in bank mode and with an ideal acro pilot reading the plant's truth, and prints bank as a percentage of acro: the racing yardstick the owner set on 2026-10-19. `npm run check:bank -- --explore` prints the time series of the sortie, which is how to see *why* a row failed. The report is in `build/bank/report.json`.
 
 ## The owner's flights
 
