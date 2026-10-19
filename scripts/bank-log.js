@@ -13,6 +13,8 @@
  *   npm run bank:log -- --from 83 ...      start the log (and so the replay, from the ground) at 83 s: after a
  *                                          crash the page resets the craft, the replay does not
  *                                          summarise that flight the same way, beside the log's
+ *   npm run bank:log -- --replay --airborne   take off in bank to 20 m first and fly the log's sticks from
+ *                                          there, for a log whose sticks never leave the ground in the replay
  *
  * READING THE SUMMARY. Each row is half a second while Bank is on. "gyroP"
  * is the span and the number of direction changes of the pitch rate, the
@@ -21,7 +23,9 @@
  * attitude loop or the plant; one that swings with the target is the
  * firmware commanding it. The debug columns (DEBUG_BANK, see the DEBUG_SET
  * calls in the Betaflight branch's flight/bank_mode.c) say which estimate
- * moved: speed estimate, thrust trim, thrust to weight.
+ * moved: speed estimate (0), learned drag rate D (1) and thrust trim (2).
+ * Logs from before 2026-10-19 have the corner speed in 1, so read D there as
+ * nonsense.
  *
  * THE REPLAY flies the logged sticks at the logged rows' times, switching Bank
  * on and off where the log's "bank active" column does, at the five inch's
@@ -117,7 +121,7 @@ const fmt = (x, d = 1) => (x === undefined || Number.isNaN(x) ? '-' : x.toFixed(
 
 function summarise(rows, title) {
   console.log(`\n${title}`);
-  console.log('   t   | gyroP span dirs | pTgt span | coll      | lift  speed | vz    alt  spd  | speedEst  trim  T/W');
+  console.log('   t   | gyroP span dirs | pTgt span | coll      | lift  speed | vz    alt  spd  | speedEst  D     trim');
   const end = rows.at(-1).t;
   for (let s = Math.floor(rows[0].t / WINDOW_S) * WINDOW_S; s < end; s += WINDOW_S) {
     const w = rows.filter((r) => r.t >= s && r.t < s + WINDOW_S);
@@ -139,7 +143,7 @@ function summarise(rows, title) {
       + `${fmt(Math.min(...w.map((r) => r.coll)), 2)}-${fmt(Math.max(...w.map((r) => r.coll)), 2)} | `
       + `${fmt(mean(w.map((r) => r.lift)), 2)}  ${fmt(mean(w.map((r) => r.speed)), 2)}  | `
       + `${fmt(last.vz).padStart(5)} ${fmt(last.alt, 0).padStart(4)} ${fmt(last.spd).padStart(4)} | `
-      + `${d(0, 1000).padStart(8)} ${d(2, 1000).padStart(5)} ${d(4, 100).padStart(5)}${mark}`);
+      + `${d(0, 1000).padStart(8)} ${d(1, 1000).padStart(5)} ${d(2, 1000).padStart(5)}${mark}`);
   }
 }
 
@@ -179,6 +183,23 @@ async function replay(rows) {
   let bankOn = false;
   let prevPitch = 0;
   const t0 = rows[0].t;
+  /* --airborne: in bank, Speed at the bottom, climb on the Lift stick to
+   * 20 m, then 2 s at centre Lift, before the log's sticks start. */
+  let pre = 0;
+  if (flag('--airborne') >= 0) {
+    must(sim.e.sim_set_bank_mode(1), 'sim_set_bank_mode');
+    bankOn = true;
+    for (let settle = -1; settle < 2 * RX_HZ && pre < 60 * RX_HZ; pre += 1) {
+      const climbing = settle < 0;
+      must(sim.input(pre / RX_HZ, 0, -(2 * (climbing ? 0.7 : 0.5) - 1), 0, 0), 'sim_input');
+      must(sim.step(STEP_HZ / RX_HZ), 'sim_step');
+      if (climbing && sim.readState().state[3] >= 20) {
+        settle = 0;
+      } else if (!climbing) {
+        settle += 1;
+      }
+    }
+  }
   for (let t = 0; t < rows.at(-1).t - t0; t += 1 / RX_HZ) {
     while (k + 1 < rows.length && rows[k + 1].t - t0 <= t) {
       k += 1;
@@ -188,7 +209,7 @@ async function replay(rows) {
       bankOn = r.active >= 0.5;
       must(sim.e.sim_set_bank_mode(bankOn ? 1 : 0), 'sim_set_bank_mode');
     }
-    must(sim.input(t, r.head, -(2 * r.lift - 1), r.bank, r.speed), 'sim_input');
+    must(sim.input(t + pre / RX_HZ, r.head, -(2 * r.lift - 1), r.bank, r.speed), 'sim_input');
     must(sim.step(STEP_HZ / RX_HZ), 'sim_step');
     const { state } = sim.readState();
     const n = sim.e.sim_bank_telemetry(telPtr, 32);

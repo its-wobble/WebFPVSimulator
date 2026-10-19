@@ -35,7 +35,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { airframeById } from '../configs/airframes.js';
+import { airframeById, MICRO_SCALE, simIdFor } from '../configs/airframes.js';
 import { RATE_DEFAULTS } from '../configs/rates.js';
 import { composeConfig, RATES_KEEP } from '../src/fc/dump.js';
 import { loadSim, SIM_OK, simErrorName } from '../tests/lib/simmod.js';
@@ -43,6 +43,8 @@ import { must, sha256Hex } from '../tests/lib/replay.js';
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const EXPLORE = process.argv.includes('--explore');
+/* With --explore, --whoop prints the whoop's sortie instead. */
+const EXPLORE_CRAFT = process.argv.includes('--whoop') ? 'whoop65' : '5inch';
 const RX_HZ = 250;
 const STEP_HZ = 1000;
 const DEG = 180 / Math.PI;
@@ -52,6 +54,7 @@ const wasm = await readFile(join(root, 'dist/sim-bank.wasm')).catch(() => {
   process.exit(1);
 });
 const defaultDiff = await readFile(join(root, 'configs/betaflight-default.diff'), 'utf8');
+const whoopDiff = await readFile(join(root, 'configs/whoop-champion.diff'), 'utf8');
 const thresholds = JSON.parse(await readFile(join(root, 'tests/bank-thresholds.json'), 'utf8'));
 
 /* The Speed stick's stop: the raw throttle at min_check (1050), where the
@@ -82,27 +85,41 @@ function wrap(a) {
   return a;
 }
 
-async function newFlight() {
+/* The crafts the sortie is flown on. The whoop is its own plant (1S, 0702
+ * motors) with its own tune, at one real g; its drag and thrust to weight are
+ * far from the five inch's, which the firmware's defaults are, so it shows
+ * the mode learning an airframe it was not set up for. */
+const CRAFTS = {
+  '5inch': { diff: defaultDiff, lenScale: 1 },
+  /* The whoop's plant works in its room's metres, MICRO_SCALE times life
+   * size; its accelerometer reads real g. The samples are turned back into
+   * real metres, so its rows are in the units a whoop pilot knows. */
+  whoop65: { diff: whoopDiff, lenScale: MICRO_SCALE },
+};
+
+async function newFlight(airframe = '5inch') {
   const sim = await loadSim(wasm);
   if (typeof sim.e.sim_set_bank_mode !== 'function') {
     throw new Error('sim-bank.wasm has no sim_set_bank_mode; was it built with BANK=1?');
   }
-  const cfg = composeConfig(defaultDiff, RATE_DEFAULTS, RATES_KEEP);
+  /* Airframe before init, as the shell and flightcheck.js set it. */
+  must(sim.e.sim_set_airframe(simIdFor(airframe)), 'sim_set_airframe');
+  const len = CRAFTS[airframe].lenScale;
+  const cfg = composeConfig(CRAFTS[airframe].diff, RATE_DEFAULTS, RATES_KEEP);
   const code = sim.init(cfg);
   if (code !== SIM_OK) {
     throw new Error(`sim_init: ${simErrorName(code)}`);
   }
-  /* A full pack, as the shell starts (ui.js packVoltage 4.2): the firmware's
-   * bank_thrust_to_weight is fixed and was measured hovering on a full pack,
-   * so a lower voltage makes the centre of the lift stick sink. */
+  /* A full pack, as the shell starts (ui.js packVoltage 4.2). */
   must(sim.setCellVoltage(4.2), 'sim_set_cell_voltage');
-  /* Flown as the shell flies it: at the five inch's own gravity (1.62 g, the
-   * shell's Weight 100) and from the ground. The bank accelerometer reads in
+  /* Flown as the shell flies it: at the craft's own gravity (1.62 g for the
+   * five inch, the shell's Weight 100) and from the ground. The bank accelerometer reads in
    * the local g (bf_bank.c), so a craft at rest reads 1 g as on Earth; the
    * module's default 1.0 g in free air hid that the shell's world once read
    * 1.62 g at rest, and the owner's flights oscillated for it (PROGRESS.md,
    * 2026-10-15). */
-  must(sim.e.sim_set_gravity(airframeById('5inch').gravityBase), 'sim_set_gravity');
+  const gravity = airframeById(airframe).gravityBase;
+  must(sim.e.sim_set_gravity(gravity), 'sim_set_gravity');
   must(sim.reset(), 'sim_reset');
   must(sim.e.sim_set_ground(1, 0, 0, 1, 0, 0, 0, 0.55, 0.28), 'sim_set_ground');
   const telPtr = sim.e.malloc(32 * 8);
@@ -112,6 +129,9 @@ async function newFlight() {
   const hash = [];
   const flight = {
     sim,
+    /* The local g, m/s^2: the bank accelerometer reads in it, so the
+     * firmware's g of drag and its learned drag rate are in it too. */
+    g: gravity * 9.80665,
     bank(on) { must(sim.e.sim_set_bank_mode(on ? 1 : 0), 'sim_set_bank_mode'); },
     sticks(s) { sticks = channels(s); },
     /* Fly `seconds` with the current sticks, sampling every RC frame. */
@@ -125,9 +145,9 @@ async function newFlight() {
         const n = sim.e.sim_bank_telemetry(telPtr, 32);
         const tel = Array.from(new Float64Array(sim.e.memory.buffer, telPtr, n));
         const e = eulerOf(state.slice(7, 11));
-        const v = state.slice(4, 7);
+        const v = state.slice(4, 7).map((x) => x / len);
         samples.push({
-          label, t: state[0], pos: state.slice(1, 4), vel: v,
+          label, t: state[0], pos: state.slice(1, 4).map((x) => x / len), vel: v,
           roll: e.roll * DEG, pitch: e.pitch * DEG, yaw: e.yaw * DEG,
           speedH: Math.hypot(v[0], v[1]), track: Math.atan2(v[1], v[0]) * DEG,
           active: tel[0], rollTgt: tel[1], pitchTgt: tel[2], yawRateCmd: tel[3],
@@ -152,8 +172,8 @@ const span = (a) => Math.max(...a) - Math.min(...a);
 
 /* The standard sortie: engage, settle, cruise, turn, brake, reverse. Every
  * scenario reads its own labelled window, so one flight serves them all. */
-async function sortie() {
-  const f = await newFlight();
+async function sortie(airframe) {
+  const f = await newFlight(airframe);
   f.sticks({ speed: 0, lift: 0.5 });
   f.bank(true);
   f.fly(1.0, 'engage');
@@ -207,7 +227,15 @@ function vertAccel(w) {
 const noseOffset = (x) => wrap((x.yaw - x.track) / DEG) * DEG;
 /* Horizontal velocity along the nose, m/s, negative backwards. */
 const alongNose = (x) => x.vel[0] * Math.cos(x.yaw / DEG) + x.vel[1] * Math.sin(x.yaw / DEG);
-const rate = (w, key) => (wrap((w.at(-1)[key] - w[0][key]) / DEG) * DEG) / (w.at(-1).t - w[0].t);
+/* deg/s over the window, unwrapped sample by sample: a turn of 180 degrees
+ * or more in the window would otherwise wrap. */
+const rate = (w, key) => {
+  let turned = 0;
+  for (let i = 1; i < w.length; i += 1) {
+    turned += wrap((w[i][key] - w[i - 1][key]) / DEG) * DEG;
+  }
+  return turned / (w.at(-1).t - w[0].t);
+};
 
 /* Every measurement is named for what the spec in the Betaflight repo's
  * project_plan.md promises. The bands in tests/bank-thresholds.json come from
@@ -249,12 +277,21 @@ function measure(f) {
   m.brakereverse_final_speed_mps = mean(f.window('brakereverse', 1).map(alongNose));
   m.brakereverse_settled_pitch_span_deg = span(f.window('brakereverse', 2).map((x) => x.pitch));
   m.mode_off_cleared = f.window('off').at(-1).active;
+  /* What the firmware learnt of the airframe, against the plant. In steady
+   * cruise the speed estimate is the drag reading, so the plant's drag rate is
+   * g * reading / airspeed there (no wind in the sortie). */
+  const end = f.samples.at(-1);
+  m.learned_drag_rate = end.dbg[1] / 1000;
+  const steady = [...f.window('cruise', 3), ...f.window('recruise', 3)];
+  m.plant_drag_rate = mean(steady.map((x) => f.g * (x.dbg[0] / 1000) / x.speedH));
+  m.learned_drag_rate_error = Math.abs(m.learned_drag_rate - m.plant_drag_rate) / m.plant_drag_rate;
   return m;
 }
 
-const f1 = await sortie();
+const f1 = await sortie('5inch');
 if (EXPLORE) {
-  for (const s of f1.samples.filter((_, i) => i % 50 === 0)) {
+  const fx = EXPLORE_CRAFT === '5inch' ? f1 : await sortie(EXPLORE_CRAFT);
+  for (const s of fx.samples.filter((_, i) => i % 50 === 0)) {
     console.log([s.label.padEnd(10), s.t.toFixed(2), `spd ${s.speedH.toFixed(2)}`, `vz ${s.vel[2].toFixed(2)}`,
       `r ${s.roll.toFixed(1)}/${s.rollTgt.toFixed(1)}`, `p ${s.pitch.toFixed(1)}/${s.pitchTgt.toFixed(1)}`,
       `yaw ${s.yaw.toFixed(0)} trk ${s.track.toFixed(0)}`, `coll ${s.collective.toFixed(3)}`, `tw ${s.tw.toFixed(2)}`,
@@ -262,9 +299,14 @@ if (EXPLORE) {
   }
 }
 const m = measure(f1);
-const f2 = await sortie();
+const f2 = await sortie('5inch');
 const hash1 = await f1.hash();
 m.determinism_same_hash = hash1 === (await f2.hash()) ? 1 : 0;
+/* The same sortie on the whoop, from the same defaults. Its rows carry a
+ * whoop_ prefix and their own bands. */
+for (const [key, value] of Object.entries(measure(await sortie('whoop65')))) {
+  m[`whoop_${key}`] = value;
+}
 
 let failed = 0;
 const rows = [];

@@ -83,7 +83,9 @@ if [ "$BANK" = "1" ]; then
   OUT_WASM=dist/sim-bank.wasm
   BANK_INC="-I build/bank/src/main"
   # RP_AXIS_COUNT is in common/axis.h on master, not in 4.5.1.
-  BANK_DEF="-DSIM_BANK_MODE -DUSE_BANK_MODE -DRP_AXIS_COUNT=2"
+  # BANK_EXTRA_DEF: test builds only, e.g. "-DBANK_DRAG_RATE_DEFAULT=0.2f" to
+  # fly the learning from a wrong start.
+  BANK_DEF="-DSIM_BANK_MODE -DUSE_BANK_MODE -DRP_AXIS_COUNT=2 ${BANK_EXTRA_DEF:-}"
   BANK_SRC="build/bank/src/main/flight/bank_mode.c build/bank/src/main/pg/bank_mode.c
     vendor/betaflight/src/main/sensors/acceleration.c src/native/bf/bf_bank.c"
   # Objects are kept apart from the default build's so neither build can

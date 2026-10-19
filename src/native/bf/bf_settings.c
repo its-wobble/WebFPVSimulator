@@ -233,9 +233,7 @@ void bf_settings_build(void) {
    * error here, which is the cue to follow it. ---- */
   {
     bankModeConfig_t *b = bankModeConfigMutable();
-    U16("bank_thrust_to_weight", b->thrustToWeight);
     U16("bank_mid_speed", b->midSpeed);
-    U16("bank_drag_rate", b->dragRate);
     U16("bank_corner_rate", b->cornerRate);
   }
 #endif

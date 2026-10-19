@@ -18,5 +18,17 @@
   "brakereverse_final_speed_mps": { "min": -3.5, "max": -1,   "why": "the bottom of the stick from the cruise brakes, then carries on into the small reverse" },
   "brakereverse_settled_pitch_span_deg": { "min": 0, "max": 5, "why": "a steady reverse: no pitch hunting across the forward to backward flip of the speed estimate" },
   "mode_off_cleared":            { "min": 0,     "max": 0,    "why": "switching bank off clears the mode" },
-  "determinism_same_hash":       { "min": 1,     "max": 1,    "why": "same inputs give a bit identical trace" }
+  "learned_drag_rate_error":     { "min": 0,     "max": 0.15, "why": "the firmware learns the drag rate in flight from its default: within 15 % of the plant's (g * drag reading / airspeed in steady cruise) after the sortie (learned airframe plan in the Betaflight repo's project-docs/plans)" },
+  "determinism_same_hash":       { "min": 1,     "max": 1,    "why": "same inputs give a bit identical trace" },
+  "whoop_hover_vertical_accel":  { "min": -0.3,  "max": 0.3,  "why": "the whoop, flown from the five inch's defaults with no settings: pitch stick centre is 1 g of lift: zero vertical acceleration (not zero vertical speed, that needs baro)" },
+  "whoop_hover_tilt_deg":        { "min": 0,     "max": 2,    "why": "the whoop, flown from the five inch's defaults with no settings: speed stick at the bottom: no tilt" },
+  "whoop_hover_horizontal_speed": { "min": 0,     "max": 0.3,  "why": "the whoop, flown from the five inch's defaults with no settings: speed stick at the bottom commands zero speed" },
+  "whoop_cruise_speed_variation": { "min": 0,     "max": 0.5,  "why": "the whoop, flown from the five inch's defaults with no settings: a fixed speed stick holds a steady speed once settled" },
+  "whoop_cruise_vertical_accel": { "min": -0.3,  "max": 0.3,  "why": "the whoop, flown from the five inch's defaults with no settings: tilting forward raises collective by 1/cos so vertical force is unchanged" },
+  "whoop_turn_roll_tracking_deg": { "min": 0,     "max": 3,    "why": "the whoop, flown from the five inch's defaults with no settings: the craft holds the thrust direction the mode commands" },
+  "whoop_turn_coordination_dps": { "min": 0,     "max": 3,    "why": "the whoop, flown from the five inch's defaults with no settings: coordinated turn: the nose turns at the rate the track turns" },
+  "whoop_turn_vertical_accel":   { "min": -0.3,  "max": 0.3,  "why": "the whoop, flown from the five inch's defaults with no settings: bank applies the same 1/cos tilt compensation" },
+  "whoop_brake_final_speed":     { "min": 0,     "max": 0.5,  "why": "the whoop, flown from the five inch's defaults with no settings: speed stick to the stop (min_check) brakes to a stop" },
+  "whoop_mode_off_cleared":      { "min": 0,     "max": 0,    "why": "the whoop, flown from the five inch's defaults with no settings: switching bank off clears the mode" },
+  "whoop_learned_drag_rate_error": { "min": 0,     "max": 0.15, "why": "the whoop, flown from the five inch's defaults with no settings: the firmware learns the drag rate in flight from its default: within 15 % of the plant's (g * drag reading / airspeed in steady cruise) after the sortie (learned airframe plan in the Betaflight repo's project-docs/plans)" }
 }
